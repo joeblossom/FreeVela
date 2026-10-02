@@ -1,0 +1,22 @@
+.DS_Store
+node_modules/
+.env
+.env.*
+
+# Bike secrets — never commit
+vela-backup*.json
+**/Secrets.swift
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcodeproj/
+build/
+ios/Local.xcconfig
+ios/asc.env
+
+# Private firmware workspace (symlink). The published subset is in freevela-firmware/ (copied by its publish.sh).
+firmware
+# Firmware images and QEMU outputs: images go in GitHub releases, never in git
+*.bin
+freevela-firmware/qemu/*.log

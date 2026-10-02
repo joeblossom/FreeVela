@@ -1,0 +1,3 @@
+// Shared build settings. Put your own DEVELOPMENT_TEAM (and optionally
+// PRODUCT_BUNDLE_IDENTIFIER) in Local.xcconfig next to this file — it is gitignored.
+#include? "Local.xcconfig"

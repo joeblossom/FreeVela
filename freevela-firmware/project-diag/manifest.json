@@ -1,0 +1,73 @@
+{
+	"include": [
+		"$(MODDABLE)/examples/manifest_base.json",
+		"$(MODDABLE)/modules/files/preference/manifest.json",
+		"$(MODDABLE)/modules/pins/digital/manifest.json",
+		"$(MODDABLE)/modules/pins/digital/monitor/manifest.json",
+		"$(MODDABLE)/modules/pins/analog/manifest.json"
+	],
+	"build": {
+		"PARTITIONS_FILE": "$(MODDABLE)/../freevela-firmware/project/partitions.csv"
+	},
+	"config": {
+		"version": "2306052112",
+		"fvVersion": "0.1.0"
+	},
+	"modules": {
+		"*": [
+			"./main",
+			"./main_real",
+			"$(MODULES)/pins/pulsecount/esp32/*",
+			"$(MODULES)/crypt/arith/*",
+			"$(MODULES)/crypt/bin/*",
+			"$(MODULES)/crypt/digest/*",
+			"$(MODULES)/crypt/digest/kcl/*",
+			"$(MODULES)/crypt/etc/*",
+			"$(MODULES)/data/base64/*",
+			"$(MODULES)/data/hex/*"
+		],
+		"ota": "../project/native/ota",
+		"dac": "../project/native/dac",
+		"standby": "../project/native/standby",
+		"fvboot": "../project/native/fvboot",
+		"modules/fv": "../project/fv",
+		"udid": "../project/native/udid",
+		"lib/sys": "../project/native/sys",
+		"monitor": "../project/native/monitor",
+		"analog": "./mock/analog",
+		"pulsecount": "$(MODULES)/pins/pulsecount/pulsecount",
+		"ble": "../src/ble",
+		"lib/redux": "../src/lib/redux",
+		"lib/redux-logger": "../src/lib/redux-logger",
+		"lib/sleep": "../src/lib/sleep",
+		"modules/sys": "../src/modules/sys",
+		"modules/alarm": "../src/modules/alarm",
+		"modules/pas": "../src/modules/pas",
+		"modules/phone": "../src/modules/phone",
+		"modules/light": "../src/modules/light",
+		"modules/pos": "../src/modules/pos",
+		"modules/pwr": "../src/modules/pwr",
+		"modules/button": "../src/modules/button",
+		"modules/motor": "../src/modules/motor",
+		"bleserver": "./mock/bleserver",
+		"btutils": "$(MODULES)/network/ble/btutils",
+		"gap": "$(MODULES)/network/ble/gap"
+	},
+	"preload": [
+		"crypt",
+		"base64",
+		"hex",
+		"monitor",
+		"analog",
+		"pulsecount"
+	],
+	"ble": {
+		"*": [
+			"../project/bleservices/*"
+		]
+	},
+	"creation": {
+		"static": 98304,
+		"stack": 1024
+	}
+}

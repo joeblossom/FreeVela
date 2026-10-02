@@ -1,0 +1,5 @@
+{ "service": { "uuid": "00000100-7320-4cda-9830-697df55e369a", "characteristics": {
+	"auth_challenge": { "uuid": "00000101-7320-4cda-9830-697df55e369a", "maxBytes": 64, "type": "Array", "permissions": "read,write", "properties": "read,write" },
+	"auth_key":       { "uuid": "00000102-7320-4cda-9830-697df55e369a", "maxBytes": 64, "type": "Array", "permissions": "read,write", "properties": "read,write" },
+	"auth_release":   { "uuid": "00000199-7320-4cda-9830-697df55e369a", "maxBytes": 64, "type": "Array", "permissions": "read,write", "properties": "read,write" }
+} } }

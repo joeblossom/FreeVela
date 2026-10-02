@@ -1,0 +1,70 @@
+{
+	"include": [
+		"$(MODDABLE)/examples/manifest_base.json",
+		"$(MODDABLE)/modules/network/ble/manifest_server.json",
+		"$(MODDABLE)/modules/files/preference/manifest.json",
+		"$(MODDABLE)/modules/pins/digital/manifest.json",
+		"$(MODDABLE)/modules/pins/digital/monitor/manifest.json",
+		"$(MODDABLE)/modules/pins/analog/manifest.json"
+	],
+	"build": {
+		"PARTITIONS_FILE": "$(MODDABLE)/../freevela-firmware/project/partitions.csv"
+	},
+	"config": {
+		"version": "2306052112",
+		"fvVersion": "0.1.0"
+	},
+	"modules": {
+		"*": [
+			"./main",
+			"$(MODULES)/pins/pulsecount/esp32/*",
+			"$(MODULES)/crypt/arith/*",
+			"$(MODULES)/crypt/bin/*",
+			"$(MODULES)/crypt/digest/*",
+			"$(MODULES)/crypt/digest/kcl/*",
+			"$(MODULES)/crypt/etc/*",
+			"$(MODULES)/data/base64/*",
+			"$(MODULES)/data/hex/*"
+		],
+		"ota": "./native/ota",
+		"dac": "./native/dac",
+		"standby": "./native/standby",
+		"fvboot": "./native/fvboot",
+		"modules/fv": "./fv",
+		"udid": "./native/udid",
+		"lib/sys": "./native/sys",
+		"monitor": "./native/monitor",
+		"analog": "./native/analog",
+		"pulsecount": "$(MODULES)/pins/pulsecount/pulsecount",
+		"ble": "../src/ble",
+		"lib/redux": "../src/lib/redux",
+		"lib/redux-logger": "../src/lib/redux-logger",
+		"lib/sleep": "../src/lib/sleep",
+		"modules/sys": "../src/modules/sys",
+		"modules/alarm": "../src/modules/alarm",
+		"modules/pas": "../src/modules/pas",
+		"modules/phone": "../src/modules/phone",
+		"modules/light": "../src/modules/light",
+		"modules/pos": "../src/modules/pos",
+		"modules/pwr": "../src/modules/pwr",
+		"modules/button": "../src/modules/button",
+		"modules/motor": "../src/modules/motor"
+	},
+	"preload": [
+		"crypt",
+		"base64",
+		"hex",
+		"monitor",
+		"analog",
+		"pulsecount"
+	],
+	"ble": {
+		"*": [
+			"./bleservices/*"
+		]
+	},
+	"creation": {
+		"static": 98304,
+		"stack": 1024
+	}
+}

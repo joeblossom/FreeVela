@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Free My Vela</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --line:#262b36; --fg:#e8eaed; --muted:#9aa4b2;
+    --accent:#39d98a; --accent-ink:#04110a; --warn:#e0b341; --danger:#e5484d; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{--bg:#f6f7f9;--card:#fff;--line:#e4e7ec;--fg:#1a1d23;--muted:#5b6472;--accent-ink:#04110a;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto;padding:24px 16px 64px}
+  h1{font-size:26px;margin:.2em 0 .1em;letter-spacing:-.02em}
+  h1 .bike{color:var(--accent)}
+  .sub{color:var(--muted);margin:0 0 24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin:16px 0}
+  button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 16px;cursor:pointer;width:100%;margin:6px 0}
+  .primary{background:var(--accent);color:var(--accent-ink)}
+  .ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+  .apple{background:#000;color:#fff}
+  input{font:inherit;width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);margin:6px 0}
+  .muted{color:var(--muted);font-size:14px}
+  .kv{font-family:var(--mono);font-size:13px;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;margin:4px 0}
+  .label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:12px}
+  .row{display:flex;gap:8px;align-items:center}
+  .row button{width:auto;white-space:nowrap;padding:8px 12px;font-size:13px}
+  .banner{border-radius:12px;padding:12px 14px;font-size:14px;margin:12px 0}
+  .banner.info{background:rgba(57,217,138,.1);border:1px solid rgba(57,217,138,.35)}
+  .banner.warn{background:rgba(224,179,65,.1);border:1px solid rgba(224,179,65,.4);color:var(--warn)}
+  .banner.err{background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.4);color:var(--danger)}
+  .foot{color:var(--muted);font-size:12.5px;margin-top:28px;border-top:1px solid var(--line);padding-top:16px}
+  .hide{display:none}
+  code{font-family:var(--mono);background:var(--bg);padding:1px 5px;border-radius:5px}
+  .bikecard h3{margin:.1em 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Free My <span class="bike">Vela</span></h1>
+  <p class="sub">Grab the Bluetooth keys to a Vela e-bike <b>you own</b>, so it keeps
+  working now that Vela is gone. Not affiliated with Vela.</p>
+
+  <div class="banner info">
+    Your login and keys <b>never leave your browser</b>. This page talks only to
+    Google/Apple sign-in and Vela's own Firebase database, exactly as the app did.
+    Nothing is sent anywhere else.
+  </div>
+
+  <!-- SIGN IN -->
+  <div id="signin" class="card">
+    <div class="label">Step 1 — Sign in the same way you did in the Vela app</div>
+    <button class="apple" onclick="signInApple()"> Sign in with Apple</button>
+    <button class="ghost" onclick="signInGoogle()">Sign in with Google</button>
+    <div class="label">or email + password</div>
+    <input id="email" type="email" placeholder="email" autocomplete="username" />
+    <input id="pass" type="password" placeholder="password" autocomplete="current-password" />
+    <button class="primary" onclick="signInEmail()">Sign in</button>
+    <div id="signin-msg" class="muted"></div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="result" class="card hide">
+    <div class="row" style="justify-content:space-between">
+      <div class="label" style="margin:0">Signed in as <span id="who"></span></div>
+      <button class="ghost" style="width:auto;padding:6px 10px;font-size:13px" onclick="signOutNow()">Sign out</button>
+    </div>
+    <div id="bikes"></div>
+    <button class="primary" id="dl" onclick="downloadBackup()">⬇︎ Download backup (.json)</button>
+    <div class="banner warn">Save these somewhere permanent (a password manager).
+      The <code>key</code> and <code>releasedKey</code> are all you need to control
+      your bike forever, even after Vela's servers go dark.</div>
+  </div>
+
+  <div class="foot">
+    <b>Running this:</b> for Apple/Google sign-in, open this file from
+    <code>localhost</code> (Firebase only allows those sign-ins from localhost or
+    Vela's own domain). In this folder run:
+    <div class="kv">python3 -m http.server 8000</div>
+    then open <code>http://localhost:8000/free-my-vela.html</code>. Email/password
+    works from anywhere. If Apple/Google sign-in shows
+    <code>unauthorized-domain</code>, you're not on localhost.
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getAuth, signInWithPopup, signInWithEmailAndPassword, signOut,
+  GoogleAuthProvider, OAuthProvider, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, collection, query, where, getDocs, doc
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// --- Vela's Firebase project (public client config, pulled from the app) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyBUywpEBKBVfaOYzhnPWKSOW4EGZmjPy-U",
+  authDomain: "vela-c1f68.firebaseapp.com",
+  projectId: "vela-c1f68",
+  storageBucket: "vela-c1f68.appspot.com",
+  messagingSenderId: "211332556447"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let lastBikes = [];
+
+const $ = (id) => document.getElementById(id);
+const msg = (t, cls="muted") => { const e=$("signin-msg"); e.className=cls; e.textContent=t; };
+
+window.signInApple = async () => {
+  const p = new OAuthProvider("apple.com");
+  p.addScope("email"); p.addScope("name");
+  try { await signInWithPopup(auth, p); }
+  catch(e){ msg(prettyErr(e), "banner err"); }
+};
+window.signInGoogle = async () => {
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch(e){ msg(prettyErr(e), "banner err"); }
+};
+window.signInEmail = async () => {
+  try { await signInWithEmailAndPassword(auth, $("email").value.trim(), $("pass").value); }
+  catch(e){ msg(prettyErr(e), "banner err"); }
+};
+window.signOutNow = () => signOut(auth);
+
+function prettyErr(e){
+  const c = (e && e.code) || "";
+  if (c.includes("unauthorized-domain")) return "This page isn't on an authorized domain — run it from localhost (see bottom of page).";
+  if (c.includes("popup-blocked")) return "Popup was blocked — allow popups and try again.";
+  if (c.includes("wrong-password")||c.includes("invalid-credential")) return "Wrong email or password.";
+  if (c.includes("api-key")||c.includes("requests-from-referer")) return "The API key may be domain-restricted; try from localhost.";
+  return (e && e.message) || String(e);
+}
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user){ $("signin").classList.remove("hide"); $("result").classList.add("hide"); return; }
+  $("signin").classList.add("hide"); $("result").classList.remove("hide");
+  $("who").textContent = user.email || user.uid;
+  await loadBikes(user.uid);
+});
+
+async function loadBikes(uid){
+  const box = $("bikes");
+  box.innerHTML = '<div class="muted">Reading your bike record…</div>';
+  try{
+    const ownerRef = doc(db, "users", uid);
+    const q = query(collection(db, "devices"), where("owner", "==", ownerRef));
+    const snap = await getDocs(q);
+    if (snap.empty){ box.innerHTML = '<div class="banner warn">No bikes found on this account. If you used a different sign-in method for Vela, sign out and try that one.</div>'; lastBikes=[]; return; }
+    lastBikes = [];
+    box.innerHTML = "";
+    snap.forEach(d => {
+      const v = d.data();
+      lastBikes.push({ id:d.id, ...v });
+      box.insertAdjacentHTML("beforeend", bikeHtml(d.id, v));
+    });
+  }catch(e){
+    box.innerHTML = '<div class="banner err">'+prettyErr(e)+'</div>';
+  }
+}
+
+function field(label, value){
+  const id = "f"+Math.random().toString(36).slice(2);
+  return `<div class="label">${label}</div>
+    <div class="row"><div class="kv" id="${id}" style="flex:1">${value||"—"}</div>
+    <button class="ghost" onclick="copyEl('${id}')">Copy</button></div>`;
+}
+window.copyEl = (id) => { navigator.clipboard.writeText($(id).textContent).then(()=>{ const b=event.target; const t=b.textContent; b.textContent="✓"; setTimeout(()=>b.textContent=t,900); }); };
+
+function bikeHtml(id, v){
+  return `<div class="card bikecard" style="background:var(--bg)">
+    <h3>${v.displayName || "Vela"}</h3>
+    <div class="muted">${v.sku||""} ${v.serial?("· "+v.serial):""}</div>
+    ${field("Device ID (BLE)", id)}
+    ${field("key", v.key)}
+    ${field("releasedKey", v.releasedKey)}
+    ${v.sys && v.sys.ver ? field("Firmware", v.sys.ver) : (field("Firmware", (v.state&&v.state.sys&&v.state.sys.ver)||""))}
+  </div>`;
+}
+
+window.downloadBackup = () => {
+  if(!lastBikes.length) return;
+  const blob = new Blob([JSON.stringify({ exportedAt:new Date().toISOString(), source:"free-my-vela", bikes:lastBikes }, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "vela-backup.json";
+  a.click();
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+{ "service": { "uuid": "00000300-7320-4cda-9830-697df55e369a", "characteristics": {
+	"ota_state": { "uuid": "00000301-7320-4cda-9830-697df55e369a", "maxBytes": 1, "type": "Uint8", "permissions": "write", "properties": "write" },
+	"ota_data":  { "uuid": "00000302-7320-4cda-9830-697df55e369a", "maxBytes": 512, "type": "Array", "permissions": "write", "properties": "write" }
+} } }

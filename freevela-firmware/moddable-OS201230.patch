@@ -1,0 +1,20 @@
+--- a/build/devices/esp32/xsProj/main/main.c
++++ b/build/devices/esp32/xsProj/main/main.c
+@@ -209,6 +209,9 @@
+ 	return ESP_OK == uart_set_baudrate(USE_UART, baud);
+ }
+ 
++/* FreeVela: trial-boot safety net, overridden by project/native/fvboot.c (weak no-op otherwise). */
++void __attribute__((weak)) freevela_boot_check(void) {}
++
+ void app_main() {
+ 	modPrelaunch();
+ 
+@@ -217,6 +220,7 @@
+ 	esp_log_level_set("I2S", ESP_LOG_ERROR);
+ 
+ 	ESP_ERROR_CHECK(nvs_flash_init());
++	freevela_boot_check();
+ #if CONFIG_BT_ENABLED
+     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+ #endif
