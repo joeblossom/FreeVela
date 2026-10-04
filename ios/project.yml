@@ -20,7 +20,7 @@ targets:
       properties:
         CFBundleDisplayName: FreeVela
         CFBundleShortVersionString: "0.1"
-        CFBundleVersion: "19"
+        CFBundleVersion: "20"
         NSBluetoothAlwaysUsageDescription: FreeVela connects to your bike over Bluetooth to read its state and send commands.
         UILaunchScreen: {}
         UIBackgroundModes: [bluetooth-central]
