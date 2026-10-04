@@ -289,6 +289,34 @@ final class BikeLink: NSObject, ObservableObject {
         await attempt("write KEY") { try await write(BikeProtocol.key, bytes) }
     }
 
+    /// Replaces the bike's key: RELEASE ← current key (the bike forgets it), then KEY ← the new key
+    /// (the bike registers it and stays unlocked). Returns the new keys once the bike has them; the
+    /// caller must save them. If KEY fails after RELEASE, the bike has no key and the next unlock
+    /// re-pairs it with the old one.
+    func resetKeys() async -> BikeKeys? {
+        guard isUnlocked, let bike, let old = bike.keyBytes else { log.add(.error, "unlock the bike first"); return nil }
+        let new = bike.withNewKeys()
+        guard let newKey = new.keyBytes else { return nil }
+        await acquire("command")
+        defer { release("command") }
+        log.add(.info, "— reset keys (old fp \(BikeKeys.fingerprint(old)), new fp \(BikeKeys.fingerprint(newKey))) —")
+        do {
+            try await write(BikeProtocol.release, old, logAs: "<current key>")
+            try await write(BikeProtocol.key, newKey, logAs: "<new key>")
+            try await Task.sleep(for: .milliseconds(300))
+            // A bike that didn't take the key answers "undefined" instead of JSON.
+            guard try await read(BikeProtocol.state).first == UInt8(ascii: "{") else {
+                log.add(.error, "reset keys: the bike didn't accept the new key")
+                return nil
+            }
+        } catch {
+            log.add(.error, "reset keys: \(errorText(error))")
+            return nil
+        }
+        log.add(.ok, "keys reset")
+        return new
+    }
+
     /// The expected happy path from docs/protocol.md, stopping at the first surprise.
     func runAuth(writeRelease: Bool) async {
         guard bike != nil else { log.add(.error, "load a bike's keys first"); return }
@@ -377,7 +405,11 @@ final class BikeLink: NSObject, ObservableObject {
 
     /// The bike doesn't send STATE notifications (as of firmware 2306052112),
     /// so poll it while connected. State changes are still logged by feedState.
-    func startPolling(every interval: Duration = .seconds(1.5)) {
+    /// How often STATE is read while connected; the ride recorder shortens it.
+    var pollInterval: Duration = .seconds(1.5)
+
+    func startPolling() {
+        let interval = pollInterval
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -408,8 +440,11 @@ final class BikeLink: NSObject, ObservableObject {
         var flat: [String: String] = [:]
         flatten(obj, into: &flat)
         let changes = flat.keys.sorted().filter { lastState[$0] != flat[$0] }
-        // sys.date / sys.live tick every second; leave them out of the log.
-        let noteworthy = changes.filter { $0 != "sys.date" && $0 != "sys.live" }
+        // sys.date / sys.live tick every second, fv.live is the live throttle and fv.adc raw readings;
+        // leave them out of the log.
+        let noteworthy = changes.filter {
+            $0 != "sys.date" && $0 != "sys.live" && !$0.hasPrefix("fv.live.") && !$0.hasPrefix("fv.adc.")
+        }
         if !lastState.isEmpty && !noteworthy.isEmpty {
             log.add(.info, "STATE changed: " + noteworthy.map { "\($0) \(lastState[$0] ?? "∅")→\(flat[$0]!)" }.joined(separator: ", "))
         }

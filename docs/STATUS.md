@@ -69,6 +69,50 @@ Still to check on 0.1.0:
 - Front brake + button as a wake combination (only one brake input, GPIO 32, so either both
   levers share it or only the rear lever has a sensor).
 
+### FreeVela 0.2.0 — key reset (in progress, 2026-10-03; not built as a release image yet)
+
+Firmware (QEMU `test_ble.sh` and `test_fvboot.sh` pass): brake + button 15 s key reset, reset lock
+(`fv.lock`, set on the first unlock, `fv/LOCK_SET` from the app, cleared by RELEASE), OTA requires
+the unlock, `caps: ["key-reset"]`. App (builds, not on TestFlight): Settings → Keys with Save key
+backup, Reset keys (RELEASE old key → KEY new key) and the Reset from the bike toggle. See
+docs/protocol.md "Key reset".
+
+Sleep timer (2026-10-04, QEMU `test_ble.sh` TEST 9 passes): `fv.sleep` minutes, `fv/SLEEP_SET`,
+cap `sleep-timer`, off by default. App: Settings → Power → Sleep after (Never, 5–120 min). See
+docs/protocol.md "Sleep timer". Eco below moved from Home to Settings → Riding (remembered in the app
+for the next time Auto is picked).
+
+Motor (2026-10-04, QEMU-tested): settings `fv.tune` (top speed,
+button as boost or throttle, curve numbers) via `fv/TUNE_SET`, live throttle `fv.live`, speed window
+sliding every 250 ms, faster climb back after coasting (cr 0.4). App: Settings → Motor (Top speed,
+Button), Developer tools → Ride recorder (CSV) and Motor tuning. The user reports assist fading near
+19 mph and coming back slowly; that fits the stock drive curve (throttle at its 225 ceiling by ~10 mph;
+~23 s to climb back after coasting).
+Unknown: what speed the motor controller gives at 225 vs 254, and whether it has its own limit —
+record a ride.
+
+Test image **0.2.0-beta1** (2026-10-04): `firmware/out/freevela-0.2.0-beta1.bin`, 776,240 B, sha256
+`58d68266…cef6cf6ad7`, in iCloud Drive → FreeVela Firmware and in `FirmwareImage.known` (import only,
+not on GitHub). TestFlight build 18 accepts it. `fvVersion` in project/manifest.json is
+`0.2.0-beta1`; set it back to `0.2.0` (or the next beta) for the next build.
+
+Test image **0.2.0-beta2** (2026-10-04): beta1 plus charging from the battery trend and the analog
+probe (`fv.adc`); `firmware/out/freevela-0.2.0-beta2.bin`, 778,784 B, sha256 `84181676…67979819`,
+iCloud Drive → FreeVela Firmware, import only. App build 19: light On/Off (On = auto; always-on is
+switched to auto), controls wait for the bike to confirm, charging bolt, Charger probe.
+
+Still to do:
+- On the bike: Charger probe readings unplugged vs plugged in; does `pwr.chr` follow charging?
+- On the bike: record a ride on default settings, then with a higher top speed; try Throttle with the
+  rear wheel off the ground first (brake must cut it).
+- On the bike: the sleep timer fires and the bike wakes with brake + button afterwards.
+- Keyless firmware install in the app (the Firmware update screen needs an unlock today), so a
+  stranded owner on Vela firmware can install 0.2.0, then reset and pair within the 10-min trial.
+- "Set up as new owner" in onboarding (generate keys with `BikeKeys.withNewKeys()`, pair to the
+  keyless bike).
+- On the bike: chirp volume, that the brake + button hold doesn't fight walk assist, Reset keys on
+  Vela 2306052112 and on 0.2.0.
+
 ### Findings
 - **Wake from Sleep (2026-10-01):** after a Sleep, the button alone, the brake alone and pedalling
   don't wake the bike; **holding the (rear) brake lever + handlebar button together does.** GPIO 32

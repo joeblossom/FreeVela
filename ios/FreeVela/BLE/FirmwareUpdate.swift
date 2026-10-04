@@ -23,6 +23,13 @@ struct FirmwareImage: Identifiable, Hashable {
         FirmwareImage(name: "FreeVela 0.1.0 (pre-release)", version: "0.1.0", freeVela: true,
                       size: 769_200, sha256: "6ecf684908de661d9649b515b3f67120204582b089cf3549ef60277ce4e4cb47",
                       url: release("firmware-v0.1.0", "freevela-0.1.0.bin")),
+        // 0.1.0 plus key reset, sleep timer, motor settings (top speed, button as throttle) and the
+        // live throttle for the ride recorder. Test build: import from Files, not on GitHub.
+        FirmwareImage(name: "FreeVela 0.2.0-beta1 (test)", version: "0.2.0-beta1", freeVela: true,
+                      size: 776_240, sha256: "58d6826668794efee1bd922a2cf4768d3f317b10ab4acf9b4398d3cef6cf6ad7"),
+        // beta1 plus charging from the battery trend and the analog probe (`fv.adc`). Test build.
+        FirmwareImage(name: "FreeVela 0.2.0-beta2 (test)", version: "0.2.0-beta2", freeVela: true,
+                      size: 778_784, sha256: "84181676772388e7e14bd11503541c750c37a75b7618af497a04944c67979819"),
     ]
 
     private static func release(_ tag: String, _ file: String) -> URL? {

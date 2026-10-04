@@ -1,251 +1,339 @@
 import SwiftUI
 
-/// The simple flow: pick your bike's keys → connect → unlock → control.
-/// Everything low-level lives in Developer tools (LabView).
+/// Speed first: a huge number, one big assist slider and round quick actions.
+/// Keys, units and developer tools live in Settings.
 struct HomeView: View {
-    @EnvironmentObject private var keys: KeyStore
+    @EnvironmentObject private var session: Session
     @EnvironmentObject private var link: BikeLink
-    @EnvironmentObject private var log: LabLog
-    @EnvironmentObject private var updater: FirmwareUpdater
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var selectedID: String?
-    @State private var busy: String?
-    /// What the user just picked, shown until the bike's state catches up.
-    @State private var pendingAssist: BikeProtocol.AssistMode?
-    @State private var pendingToggles: [String: Bool] = [:]
-    @State private var pendingLight: Int?
-    @State private var ecoDraft: Double?
-    @State private var sounding = false
-    @State private var confirmSound = false
+    @AppStorage("units") private var units: Units = .kmh
+    @State private var showSettings = false
+    @State private var riding = false
+    @State private var confirmSiren = false
 
-    private var bike: BikeKeys? { keys.bikes.first { $0.id == selectedID } }
-    private var connected: Bool { link.phase == .connected && link.ready }
+    private var ok: Bool { link.isUnlocked }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                KeysView(selectedID: $selectedID)
-                if bike != nil { bikeSection }
-                if link.isUnlocked { statusSection; controlsSection }
-                Section {
-                    NavigationLink("Developer tools") { LabView(selectedID: $selectedID) }
-                    ShareLink("Share log with developer", item: log.exportText)
-                } footer: {
-                    Text("Something not working? Share the log — it never contains your keys.")
-                }
-            }
-            .navigationTitle("FreeVela")
-        }
-        .onAppear { if selectedID == nil { selectedID = keys.bikes.first?.id } }
-        .onChange(of: selectedID, initial: true) { link.bike = bike; autoConnect() }
-        .onChange(of: keys.bikes) { link.bike = bike }
-        .onChange(of: link.bluetooth) { autoConnect() }
-        .onChange(of: scenePhase) { if scenePhase == .active { autoConnect() } }
-    }
-
-    /// Looks for the bike once whenever the app opens or comes back, if it isn't connected.
-    private func autoConnect() {
-        guard bike != nil, busy == nil, !updater.running, link.bluetooth == .poweredOn,
-              link.phase != .connecting, link.phase != .scanning, !connected else { return }
-        busy = "Looking for your bike…"
-        Task { await connect() }
-    }
-
-    // MARK: Connect + unlock
-
-    private var statusLine: String {
-        if let busy { return busy }
-        if link.bluetooth != .poweredOn { return "Bluetooth is \(link.bluetooth.label)." }
-        if link.isUnlocked { return "Connected and unlocked." }
-        if connected { return "Connected, but locked. Tap Unlock." }
-        if link.phase == .connecting { return "Connecting…" }
-        return "Not connected. Wake the bike (hold the brake and the button), then tap Connect."
-    }
-
-    private var bikeSection: some View {
-        Section {
-            Text(statusLine)
-            if busy != nil {
-                ProgressView()
-            } else if !connected {
-                Button("Connect") { Task { await connect() } }.fontWeight(.semibold)
-            } else if !link.isUnlocked {
-                Button("Unlock") { Task { await unlock() } }.fontWeight(.semibold)
-                Button("Disconnect", role: .destructive) { link.disconnect() }
-            } else {
-                Button("Disconnect", role: .destructive) { link.disconnect() }
-            }
-        } header: {
-            Text("Bike")
-        } footer: {
-            if !link.isUnlocked {
-                Text("Close the old Vela app first — the bike only talks to one phone at a time. Unlocking takes a couple of seconds.")
-            }
-        }
-    }
-
-    private func connect() async {
-        busy = "Looking for your bike…"
-        defer { busy = nil }
-        guard let p = await link.findBike() else { return }
-        busy = "Connecting…"
-        if await link.connectAndWait(p) { await unlock() }
-    }
-
-    private func unlock() async {
-        busy = "Unlocking…"
-        defer { busy = nil }
-        _ = await link.unlock { busy = $0 }
-    }
-
-    // MARK: Dashboard
-
-    private func value(_ path: String) -> String? { link.values[path] }
-
-    private var assistMode: BikeProtocol.AssistMode? {
-        BikeProtocol.AssistMode(ast: value("motor.ast"), save: value("pwr.save"))
-    }
-
-    private var odometer: String {
-        guard let pulses = value("motor.pulse").flatMap(Double.init) else { return "—" }
-        let km = pulses * BikeProtocol.kmPerPulse, mi = pulses * BikeProtocol.miPerPulse
-        return String(format: "%.1f km · %.1f mi", km, mi)
-    }
-
-    private func isOn(_ path: String) -> Bool {
-        pendingToggles[path] ?? (value(path) == "1" || value(path) == "true")
-    }
-
-    private func toggle(_ path: String, on: Bool, _ json: String) {
-        pendingToggles[path] = on
-        Task {
-            await link.dispatch(json, base64Text: false)
-            pendingToggles[path] = nil
-        }
-    }
-
-    /// Whether the connected bike's firmware supports a feature (see BLE/Firmware.swift).
-    private func can(_ c: Capability) -> Bool { link.firmware?.has(c) ?? false }
-
-    private var statusSection: some View {
-        Section("Status") {
-            LabeledContent("Battery", value: value("pwr.fuel").map { "\($0)%" } ?? "—")
-            LabeledContent("Charging", value: value("pwr.chr").map { _ in isOn("pwr.chr") ? "Yes" : "No" } ?? "—")
-            LabeledContent("Speed", value: value("motor.rps").flatMap(Double.init).map {
-                String(format: "%.0f km/h · %.0f mph", $0 * BikeProtocol.metersPerRev * 3.6, $0 * BikeProtocol.metersPerRev * 2.237)
-            } ?? "—")
-            LabeledContent("Odometer", value: odometer)
-            LabeledContent("Alarm", value: value("alarm.armed").map { _ in isOn("alarm.armed") ? "Armed" : "Off" } ?? "—")
-            LabeledContent("Firmware", value: link.firmware?.label ?? value("sys.ver") ?? "—")
-            if link.firmware?.kind == .velaUnknown {
-                Text("This firmware version hasn't been tested with FreeVela, so only the basic controls are shown.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var controlsSection: some View {
-        Group {
-            if can(.assistModes) {
-            Section {
-                Picker("Assist", selection: Binding(
-                    get: { pendingAssist ?? assistMode },
-                    set: { mode in
-                        guard let mode, mode != (pendingAssist ?? assistMode) else { return }
-                        pendingAssist = mode
-                        Task {
-                            await link.setAssist(mode)
-                            pendingAssist = nil
-                        }
+        GeometryReader { geo in
+            ScrollView {
+                VStack(spacing: 0) {
+                    header
+                    StatusBanner()
+                    VStack(spacing: 0) {
+                        speed.frame(maxHeight: .infinity)
+                        if !ok || link.can(.assistModes) { assist }
+                        quickActions
+                        startRide
                     }
-                )) {
-                    ForEach(BikeProtocol.AssistMode.allCases) { Text($0.rawValue).tag(Optional($0)) }
+                    .opacity(ok ? 1 : 0.35)
+                    .disabled(!ok)
+                    .animation(.easeInOut(duration: 0.3), value: ok)
                 }
-                .pickerStyle(.segmented)
-                if can(.ecoThreshold), (pendingAssist ?? assistMode) == .auto, let save = value("pwr.save").flatMap(Double.init) {
-                    let shown = ecoDraft ?? save
-                    VStack(alignment: .leading) {
-                        Text("Switch to eco below \(Int(shown))% battery")
-                        Slider(value: Binding(get: { shown }, set: { ecoDraft = $0 }), in: 5...95, step: 5) { editing in
-                            guard !editing, let draft = ecoDraft else { return }
-                            Task {
-                                await link.setEcoThreshold(Int(draft))
-                                ecoDraft = nil
-                            }
-                        }
+                .padding(.bottom, 16)
+                .frame(minHeight: geo.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .background(Color(.systemBackground))
+        .sheet(isPresented: $showSettings) { SettingsView() }
+        .fullScreenCover(isPresented: $riding) { RideView() }
+        .confirmationDialog("Sound the bike's siren for 15 seconds? It's loud. Stay connected until it stops.",
+                            isPresented: $confirmSiren, titleVisibility: .visible) {
+            Button("Sound alarm", role: .destructive) { session.soundSiren() }
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(session.bike?.name ?? "FreeVela").font(.title2.bold())
+                StatusLabel()
+            }
+            Spacer()
+            Button { showSettings = true } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+                    .background(Color(.secondarySystemBackground), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+    }
+
+    private var speed: some View {
+        Button { units = units.toggled } label: {
+            VStack(spacing: 0) {
+                Text(ok ? link.speed(units).map { "\(Int($0.rounded()))" } ?? "—" : "—")
+                    .font(.system(size: 148, weight: .bold).monospacedDigit())
+                    .tracking(-6)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
+                Text(units.label).font(.title3.weight(.semibold)).foregroundStyle(.secondary)
+                HStack(spacing: 16) {
+                    Label(link.battery.map { "\($0)%" } ?? "—%", systemImage: link.batterySymbol)
+                        .labelStyle(TintedIconLabel(tint: .green))
+                    Label(link.odometerPulses.map { distance(pulses: $0, units) } ?? "—",
+                          systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        .labelStyle(TintedIconLabel(tint: .secondary))
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.top, 16)
+            }
+            .frame(maxWidth: .infinity, minHeight: 240)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Switches between km/h and mph")
+    }
+
+    private var assist: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Assist").fontWeight(.semibold)
+                Spacer()
+                Text(session.assist == .auto ? "Auto · eco below \(session.eco)%" : session.assist?.rawValue ?? "")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 4)
+            .padding(.bottom, 10)
+            AssistSlider(mode: session.assist) { session.setAssist($0) }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var quickActions: some View {
+        HStack(alignment: .top, spacing: 0) {
+            if !ok || link.can(.light) {
+                let light = session.light ?? .auto
+                QuickAction(symbol: light.symbol, label: "Light \(light.label)",
+                            fill: light.isOn ? .orange : nil, tint: light.isOn ? .white : .gray) {
+                    session.setLight(light.next)
+                }
+            }
+            if !ok || link.can(.alarm) {
+                let armed = session.isOn("alarm.armed")
+                QuickAction(symbol: armed ? "checkmark.shield.fill" : "shield.slash",
+                            label: armed ? "Armed" : "Alarm off",
+                            fill: armed ? .green : nil, tint: armed ? .white : .gray) {
+                    session.setAlarm(!armed)
+                }
+            }
+            if !ok || link.can(.findMyBike) {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let left = session.sirenEnds.map { max(0, Int($0.timeIntervalSince(context.date).rounded(.up))) }
+                    QuickAction(symbol: "speaker.wave.3.fill", label: left.map { "\($0)s" } ?? "Find bike",
+                                fill: left == nil ? nil : .red, tint: left == nil ? .red : .white) {
+                        if session.sirenEnds == nil { confirmSiren = true }
                     }
                 }
-            } header: {
-                Text("Assist")
-            } footer: {
-                Text("Off: no motor help. Low: gentle eco assist always. Auto: full assist until the battery drops to the level above, then eco. High: full assist always. Hold the handlebar button while pedalling for boost, or without pedalling for walk assist.")
             }
+            if !ok || link.can(.sleep) {
+                QuickAction(symbol: "moon.fill", label: "Sleep", fill: nil, tint: .indigo) { session.sleep() }
             }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 22)
+    }
 
-            if can(.alarm) || can(.ebrake) {
-            Section {
-                if can(.alarm) {
-                Toggle("Alarm", isOn: Binding(
-                    get: { isOn("alarm.armed") },
-                    set: { toggle("alarm.armed", on: $0, $0 ? #"{"type":"alarm/ARM"}"# : #"{"type":"alarm/DESARM"}"#) }
-                ))
-                }
-                if can(.ebrake) {
-                Toggle("E-brake", isOn: Binding(
-                    get: { isOn("motor.ebc") },
-                    set: { toggle("motor.ebc", on: $0, #"{"type":"motor/EBC_SET","payload":\#($0 ? 1 : 0)}"#) }
-                ))
-                }
-            } footer: {
-                Text("E-brake makes the motor brake when you pull the brake lever above about 18 km/h. Arming the alarm uses the same brake to make the rear wheel hard to turn.")
-            }
-            }
+    private var startRide: some View {
+        Button { riding = true } label: {
+            Label("Start ride", systemImage: "play.fill")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .foregroundStyle(Color(.systemBackground))
+                .background(Color.primary, in: Capsule())
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 22)
+    }
+}
 
-            if can(.findMyBike) {
-            Section {
-                Button(sounding ? "Sounding…" : "Sound alarm") { confirmSound = true }
-                    .disabled(sounding)
-                    .confirmationDialog("Sound the bike's siren for 15 seconds?", isPresented: $confirmSound, titleVisibility: .visible) {
-                        Button("Sound alarm", role: .destructive) {
-                            sounding = true
-                            Task {
-                                await link.soundAlarm()
-                                sounding = false
-                            }
-                        }
-                    }
-            } header: {
-                Text("Find my bike")
-            } footer: {
-                Text("The siren is loud. FreeVela clears the alarm afterwards, so stay connected for the 15 seconds; if the connection drops, disarm the alarm to release the rear wheel.")
-            }
-            }
+// MARK: - Status
 
-            if can(.light) {
-            Section {
-                Picker("Light", selection: Binding(
-                    get: { pendingLight ?? Int(value("light.mode") ?? "") },
-                    set: { mode in
-                        guard let mode else { return }
-                        pendingLight = mode
-                        Task {
-                            await link.dispatch(#"{"type":"light/MODE_SET","payload":\#(mode)}"#, base64Text: false)
-                            pendingLight = nil
-                        }
-                    }
-                )) {
-                    Text("Auto").tag(Optional(0))
-                    Text("On").tag(Optional(1))
-                    Text("Off").tag(Optional(-1))
+/// "● Connected" under the bike's name.
+struct StatusLabel: View {
+    @EnvironmentObject private var session: Session
+    @EnvironmentObject private var link: BikeLink
+
+    var body: some View {
+        let (text, color): (String, Color) = switch session.status {
+        case .connected: ("Connected", .green)
+        case .locked: ("Locked", .orange)
+        case .searching: ("Searching…", .orange)
+        case .bluetooth: ("Bluetooth off", .gray)
+        case .asleep: ("Asleep", .gray)
+        }
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(text)
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+    }
+}
+
+/// Explains why the controls are dimmed, with the one action that helps.
+struct StatusBanner: View {
+    @EnvironmentObject private var session: Session
+    @EnvironmentObject private var link: BikeLink
+
+    var body: some View {
+        if let content {
+            HStack(spacing: 10) {
+                if content.spinning {
+                    ProgressView().frame(width: 22)
+                } else {
+                    Image(systemName: content.symbol).font(.title3).foregroundStyle(.orange).frame(width: 22)
                 }
-                .pickerStyle(.segmented)
-            } header: {
-                Text("Light")
-            } footer: {
-                Text("Auto turns the light on whenever the bike is awake.")
+                (Text(content.title).bold() + Text(" " + content.text))
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let button = content.button {
+                    Button(button.0, action: button.1)
+                        .font(.subheadline.weight(.semibold))
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                }
             }
-            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
         }
     }
 
+    private struct Content {
+        var symbol = "", title: String, text: String, spinning = false
+        var button: (String, () -> Void)?
+    }
+
+    private var content: Content? {
+        switch session.status {
+        case .connected:
+            return nil
+        case .bluetooth(let state):
+            return Content(symbol: "antenna.radiowaves.left.and.right.slash", title: "Bluetooth is \(state).",
+                           text: "FreeVela needs Bluetooth to talk to your bike.")
+        case .searching(let what):
+            return Content(title: what, text: "Stand next to it. Close the old Vela app — the bike talks to one phone at a time.",
+                           spinning: true)
+        case .locked:
+            return Content(symbol: "lock.fill", title: "Connected, but locked.", text: "Unlocking takes a couple of seconds.",
+                           button: ("Unlock", { Task { await session.unlock() } }))
+        case .asleep:
+            return Content(symbol: "moon.fill", title: "Bike is asleep.",
+                           text: "Hold the brake lever and the handlebar button together to wake it.",
+                           button: ("Connect", { Task { await session.connect() } }))
+        }
+    }
+}
+
+// MARK: - Controls
+
+/// One fat 4-stop slider: drag or tap anywhere on it. Sends the mode when you let go.
+struct AssistSlider: View {
+    var mode: BikeProtocol.AssistMode?
+    var onChange: (BikeProtocol.AssistMode) -> Void
+    @State private var dragging: Int?
+
+    private let modes = BikeProtocol.AssistMode.allCases
+    private let height: CGFloat = 64
+
+    var body: some View {
+        let shown = dragging ?? mode?.index ?? 0
+        let frac = CGFloat(shown) / CGFloat(modes.count - 1)
+        GeometryReader { geo in
+            let pad = height / 2, track = geo.size.width - height
+            let x = pad + track * frac
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color(.secondarySystemBackground))
+                Capsule()
+                    .fill(shown == 0 ? Color(.systemGray).opacity(0.35) : .accentColor)
+                    .frame(width: x + pad)
+                ForEach(Array(modes.enumerated()), id: \.offset) { i, m in
+                    Text(m.rawValue)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(i < shown ? AnyShapeStyle(.white.opacity(0.9)) : i == shown ? AnyShapeStyle(.clear) : AnyShapeStyle(.secondary))
+                        .frame(width: 60)
+                        .position(x: pad + track * CGFloat(i) / CGFloat(modes.count - 1), y: height / 2)
+                }
+                Circle()
+                    .fill(.white)
+                    .shadow(color: .black.opacity(0.18), radius: 5, y: 3)
+                    .frame(width: height - 8, height: height - 8)
+                    .overlay {
+                        Image(systemName: modes[shown].symbol)
+                            .font(.system(size: 22))
+                            .foregroundStyle(shown == 0 ? Color(.systemGray) : .accentColor)
+                    }
+                    .position(x: x, y: height / 2)
+            }
+            .animation(.snappy(duration: 0.18), value: shown)
+            .contentShape(Capsule())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { dragging = index(at: $0.location.x, pad: pad, track: track) }
+                .onEnded {
+                    let i = index(at: $0.location.x, pad: pad, track: track)
+                    dragging = nil
+                    onChange(modes[i])
+                })
+        }
+        .frame(height: height)
+        .sensoryFeedback(.selection, trigger: shown)
+        .accessibilityElement()
+        .accessibilityLabel("Assist")
+        .accessibilityValue(modes[shown].rawValue)
+        .accessibilityAdjustableAction { direction in
+            let i = direction == .increment ? min(shown + 1, modes.count - 1) : max(shown - 1, 0)
+            onChange(modes[i])
+        }
+    }
+
+    private func index(at x: CGFloat, pad: CGFloat, track: CGFloat) -> Int {
+        let f = min(max((x - pad) / track, 0), 1)
+        return Int((f * CGFloat(modes.count - 1)).rounded())
+    }
+}
+
+/// A round 56 pt button with a caption. `fill == nil` means the quiet gray background.
+struct QuickAction: View {
+    var symbol: String
+    var label: String
+    var fill: Color?
+    var tint: Color
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 22))
+                    .foregroundStyle(tint)
+                    .frame(width: 56, height: 56)
+                    .background(fill ?? Color(.secondarySystemBackground), in: Circle())
+                Text(label).font(.caption).foregroundStyle(.primary).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.2), value: fill)
+    }
+}
+
+/// A label whose icon has its own color.
+struct TintedIconLabel<S: ShapeStyle>: LabelStyle {
+    var tint: S
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 5) {
+            configuration.icon.foregroundStyle(tint)
+            configuration.title
+        }
+    }
 }

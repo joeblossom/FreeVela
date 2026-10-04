@@ -205,6 +205,68 @@ The app decides which controls to show from STATE (`ios/FreeVela/BLE/Firmware.sw
 FreeVela 0.1.0 also sends `"trial"`: the number of boots so far while the image is on trial, or 0
 once confirmed (see "Trial boot" above).
 
-Capability names the app knows: `assist-strength`, `soft-start`, `push-state`. Unknown names are
+### Key reset (FreeVela 0.2.0, QEMU-tested, not yet on a bike)
+
+- **From the app (any firmware):** Settings → Keys → **Reset keys** writes the current `key` to
+  RELEASE (the bike forgets it), then a new random `key` to KEY (the bike registers it and stays
+  unlocked). The new `releasedKey` is random and different from `key`, since a RELEASE write that
+  matches the key releases the bike.
+- **From the bike:** hold the brake lever and the handlebar button together for 15 s, wheel still.
+  Chirps every second from 5 s, then a long tone; the key is erased and the bike restarts. The hold
+  must start after the bike is awake. The next phone that writes KEY becomes the owner.
+- **Reset lock:** STATE `fv.lock` is 1 when the bike-side reset is locked. The first unlock or
+  pairing on FreeVela firmware locks it; `{"type":"fv/LOCK_SET","payload":0|1}` turns it off or on
+  (Settings → Keys → **Reset from the bike**). A RELEASE clears it, so the next owner's first unlock
+  locks it again. A bike installed from Vela firmware with keys nobody has is unlocked until someone
+  pairs, so a stranded owner can install FreeVela, hold the controls and pair as the new owner.
+- **Firmware updates need the unlock** on FreeVela 0.2.0: OTA writes from a phone that hasn't
+  unlocked are refused and the phone is disconnected.
+
+### Sleep timer (FreeVela 0.2.0, QEMU-tested, not yet on a bike)
+
+- STATE `fv.sleep` is the number of minutes without use before the bike goes to sleep; 0 (the
+  default) means never, as on Vela's firmware. `{"type":"fv/SLEEP_SET","payload":<0–240>}` sets it
+  (Settings → Power → **Sleep after**). Capability `sleep-timer`.
+- Use means riding (`motor/RPS_UPDATED`), pedalling, the button, the brake, an unlock, or a command
+  from the app (assist, saver, light, e-brake, alarm off, fv settings). Reading STATE doesn't count,
+  so a connected phone that's only showing the bike doesn't keep it awake.
+- When the time runs out it does what `pwr/SLEEP_REQUESTED` does. Not while the alarm is armed;
+  disarming starts the countdown again. Wake is brake lever + handlebar button, as after any sleep.
+
+### Motor settings and live throttle (FreeVela 0.2.0, QEMU-tested, not yet on a bike)
+
+- STATE `fv.tune` holds the motor settings; `{"type":"fv/TUNE_SET","payload":{"top":4.8,"btn":1}}`
+  sets any of them (out-of-range values are ignored). Capability `motor-tune`.
+
+  | key | range | default | meaning |
+  |---|---|---|---|
+  | `top` | 2.5–5.3 rps | 4.276 (stock) | top speed: throttle ceiling = 83 + mg + sl × top (stock: fixed 225); hard cut at max(5.5, top + 0.5) rps |
+  | `btn` | 0/1 | 0 | 0 = boost / walk assist (stock behavior); 1 = button is a throttle up to `top`, pedalling or not (no walk assist) |
+  | `mg` | 0–60 | 18 | throttle floor margin: floor = 83 + mg + sl × rps while pedalling |
+  | `sl` | 15–45 | 29 | throttle units per rps in the floor and ceiling |
+  | `cr` | 0–1 | 0.4 | drive-curve climb per 50 ms above 3 rps (stock 0.06) |
+
+- STATE `fv.live` is `{out, crv}`: the throttle written to the controller (83–254, 0 = speed cut) and
+  the curve that wrote it (`stop`, `walk`, `eco`, `boost`, `drive`, `throttle`, `cut`). The app's
+  Developer tools → Ride recorder logs it with speed, pedal, brake and button.
+- Speed (`motor.rps`) still counts pulses over one second, but the window slides every 250 ms
+  (stock: once a second).
+- Finding: in the stock drive curve the throttle reaches the 225 ceiling by
+  about 2 rps (~10 mph) and stays there; after 2 s of coasting at speed it restarts at the speed
+  floor and took ~23 s to climb back (cr 0.06). With cr 0.4 it takes ~4 s.
+
+### Charging and the analog probe (FreeVela 0.2.0-beta2, QEMU-tested, not yet on a bike)
+
+- On stock firmware `pwr.chr` is 1 only when a battery reading is a whole percent above the previous
+  one, and the battery is read rarely (start, 5 s after riding, then every 10 min while idle), so it
+  mostly shows 0 while charging. FreeVela reads the battery every minute while parked (wheel still, not
+  pedalling), refreshes `pwr.fuel`, and sets `chr` from the trend: on for a jump of 3 counts in a
+  minute or a rise of 1 count over ~8 minutes; off for a drop of 3 counts, flat or falling over that
+  span, or riding. New action `pwr/CHARGING` (payload 0/1). Still an estimate.
+- STATE `fv.adc` = `{c0, c3, c6, c7}`: raw 0–1023 readings of ADC1 channels 0, 3, 6 (GPIO 36, 39, 34,
+  unused by the firmware) and 7 (GPIO 35, battery), read when STATE is read. To find a charger
+  signal: compare them unplugged vs plugged in (app: Developer tools → State → Charger probe).
+
+Capability names the app knows: `assist-strength`, `soft-start`, `push-state`, `key-reset`, `sleep-timer`, `motor-tune`. Unknown names are
 ignored, so firmware can add capabilities before the app supports them. To add a new verified Vela
 version, add it to `FirmwareInfo.knownVela`.

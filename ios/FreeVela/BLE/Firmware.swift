@@ -10,6 +10,13 @@ enum Capability: String, CaseIterable {
     case assistStrength = "assist-strength"
     case softStart = "soft-start"
     case pushState = "push-state"
+    /// Brake + button for 15 s erases the key, unless the owner locked it (`fv.lock`).
+    case keyReset = "key-reset"
+    /// Goes to sleep after `fv.sleep` minutes without use (0 = never); set with fv/SLEEP_SET.
+    case sleepTimer = "sleep-timer"
+    /// Motor settings in `fv.tune` (top speed, button as throttle, curve numbers) set with
+    /// fv/TUNE_SET, and the live throttle in `fv.live` for the ride recorder.
+    case motorTune = "motor-tune"
 }
 
 /// What firmware the bike is running, and what it can do. Built from each STATE read.

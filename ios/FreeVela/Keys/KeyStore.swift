@@ -21,6 +21,12 @@ final class KeyStore: ObservableObject {
 
     func remove(_ bike: BikeKeys) {
         save(bikes.filter { $0.id != bike.id })
+        BikePhoto.remove(bike.id)
+    }
+
+    func rename(_ id: String, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        save(bikes.map { var b = $0; if b.id == id { b.displayName = trimmed.isEmpty ? nil : trimmed }; return b })
     }
 
     private var query: [String: Any] {

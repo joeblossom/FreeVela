@@ -1,47 +1,105 @@
 import SwiftUI
 import CoreBluetooth
 
-/// Protocol lab: every step of talking to the bike, one button at a time,
+/// Protocol lab: every step of talking to the bike, one screen per area,
 /// with a shareable log. Used to confirm docs/protocol.md on real bikes.
 struct LabView: View {
-    @EnvironmentObject private var keys: KeyStore
     @EnvironmentObject private var link: BikeLink
+    @EnvironmentObject private var recorder: RideRecorder
     @EnvironmentObject private var log: LabLog
-    @Binding var selectedID: String?
-    @State private var showAll = false
-    @State private var dispatchText = #"{"type":"alarm/ARM"}"#
-    @State private var base64Text = false
-    @State private var writeRelease = true
-
-    private var bike: BikeKeys? { keys.bikes.first { $0.id == selectedID } }
-    private var connected: Bool { link.phase == .connected }
 
     var body: some View {
-        Group {
-            Form {
-                Section {
-                    NavigationLink("Firmware update") { FirmwareUpdateView() }
+        Form {
+            Section {
+                NavigationLink { LabPage("Scan & devices") { ScanSection() } } label: {
+                    SettingsRow("Scan & devices", "dot.radiowaves.left.and.right", .blue, plain: true)
                 }
-                scanSection
-                if connected || link.phase == .connecting { connectionSection }
-                if connected {
-                    authSection
-                    unlockSection
-                    stateSection
-                    dispatchSection
+                NavigationLink { LabPage("Connection & GATT", needsConnection: true) { ConnectionSection() } } label: {
+                    LabeledContent { Text(link.phase == .connected ? "Connected" : "—") } label: {
+                        SettingsRow("Connection & GATT", "antenna.radiowaves.left.and.right", .blue, plain: true)
+                    }
                 }
-                logSection
+                NavigationLink { LabPage("State", needsConnection: true) { StateSection() } } label: {
+                    SettingsRow("State", "waveform.path.ecg", .orange, plain: true)
+                }
+                NavigationLink { LabPage("Dispatch", needsConnection: true) { DispatchSection() } } label: {
+                    SettingsRow("Dispatch", "paperplane.fill", .orange, plain: true)
+                }
+            } header: {
+                Text("Bluetooth")
+            } footer: {
+                Text("Change assist from Dispatch only with the bike on a stand.")
             }
-            .navigationTitle("Developer tools")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    ShareLink(item: log.exportText) { Label("Share log", systemImage: "square.and.arrow.up") }
+            Section("Motor") {
+                NavigationLink { RideRecorderView() } label: {
+                    LabeledContent { Text(recorder.recording ? "Recording" : "") } label: {
+                        SettingsRow("Ride recorder", "record.circle", .red, plain: true)
+                    }
+                }
+                NavigationLink { MotorTuningView() } label: {
+                    SettingsRow("Motor tuning", "slider.horizontal.3", .red, plain: true)
+                }
+            }
+            Section("Unlock") {
+                NavigationLink { LabPage("Auth steps", needsConnection: true) { AuthSection() } } label: {
+                    SettingsRow("Auth steps", "key.fill", .gray, plain: true)
+                }
+                NavigationLink { LabPage("Unlock methods", needsConnection: true) { UnlockSection() } } label: {
+                    SettingsRow("Unlock methods", "lock.open.fill", .gray, plain: true)
+                }
+            }
+            Section("Log") {
+                ForEach(log.entries.suffix(4).reversed()) { e in
+                    Text(log.line(e)).font(.caption2.monospaced()).foregroundStyle(color(e.kind))
+                }
+                NavigationLink { LogView() } label: {
+                    LabeledContent("Full log") { Text("\(log.entries.count)") }
                 }
             }
         }
+        .navigationTitle("Developer tools")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ShareLink(item: log.exportText) { Label("Share log", systemImage: "square.and.arrow.up") }
+            }
+        }
+    }
+}
+
+/// One developer-tools screen. Pages that need the bike say so instead of showing dead buttons.
+private struct LabPage<Content: View>: View {
+    @EnvironmentObject private var link: BikeLink
+    let title: String
+    var needsConnection = false
+    @ViewBuilder var content: Content
+
+    init(_ title: String, needsConnection: Bool = false, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.needsConnection = needsConnection
+        self.content = content()
     }
 
-    // MARK: Scan
+    var body: some View {
+        Form {
+            if needsConnection && link.phase != .connected && link.phase != .connecting {
+                Section {
+                    Text("Not connected. Connect from Scan & devices, or let Home find your bike.").foregroundStyle(.secondary)
+                }
+            } else {
+                content
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Scan
+
+private struct ScanSection: View {
+    @EnvironmentObject private var link: BikeLink
+    @State private var showAll = false
 
     private var visible: [BikeLink.Found] {
         link.found
@@ -51,7 +109,7 @@ struct LabView: View {
 
     private func rank(_ f: BikeLink.Found) -> Int { link.likeliness(f) }
 
-    private var scanSection: some View {
+    var body: some View {
         Section {
             HStack {
                 if link.phase == .scanning {
@@ -85,9 +143,14 @@ struct LabView: View {
         }
     }
 
-    // MARK: Connection / GATT
+}
 
-    private var connectionSection: some View {
+// MARK: - Connection / GATT
+
+private struct ConnectionSection: View {
+    @EnvironmentObject private var link: BikeLink
+
+    var body: some View {
         Section("Connection — \(link.phase.rawValue)") {
             if let name = link.connectedName { LabeledContent("Peripheral", value: name) }
             ForEach(link.services, id: \.uuid) { s in
@@ -111,9 +174,17 @@ struct LabView: View {
         }
     }
 
-    // MARK: Auth
+}
 
-    private var authSection: some View {
+// MARK: - Auth
+
+private struct AuthSection: View {
+    @EnvironmentObject private var session: Session
+    @EnvironmentObject private var link: BikeLink
+    @State private var writeRelease = true
+    private var bike: BikeKeys? { session.bike }
+
+    var body: some View {
         Section {
             Button("1. Read CHALLENGE") { Task { await link.attempt("read CHALLENGE") { try await link.read(BikeProtocol.challenge) } } }
             Button("2. Read RELEASE") { Task { await link.attempt("read RELEASE") { try await link.read(BikeProtocol.release) } } }
@@ -129,9 +200,14 @@ struct LabView: View {
         }
     }
 
-    // MARK: Unlock methods
+}
 
-    private var unlockSection: some View {
+// MARK: - Unlock methods
+
+private struct UnlockSection: View {
+    @EnvironmentObject private var link: BikeLink
+
+    var body: some View {
         Section {
             Button("Unlock handshake") { Task { _ = await link.unlockHandshake() } }.fontWeight(.semibold)
             Button("Unlock handshake, without writing RELEASE") { Task { _ = await link.unlockHandshake(writeRelease: false) } }
@@ -145,9 +221,26 @@ struct LabView: View {
         }
     }
 
-    // MARK: State
+}
 
-    private var stateSection: some View {
+// MARK: - State
+
+private struct StateSection: View {
+    @EnvironmentObject private var link: BikeLink
+
+    var body: some View {
+        if link.values["fv.adc.c0"] != nil {
+            Section {
+                ForEach(["c0": "GPIO 36", "c3": "GPIO 39", "c6": "GPIO 34", "c7": "GPIO 35 (battery)"].sorted { $0.key < $1.key }, id: \.key) { key, pin in
+                    LabeledContent(pin, value: link.values["fv.adc.\(key)"] ?? "—").monospacedDigit()
+                }
+                LabeledContent("Charging (estimated)", value: link.flag("pwr.chr") == true ? "Yes" : "No")
+            } header: {
+                Text("Charger probe")
+            } footer: {
+                Text("Raw readings (0–1023) of the board's spare analog inputs, updated with each read. Note them with the charger unplugged, then plugged in: an input that changes a lot is a charger signal. Share the log or a screenshot with the developer.")
+            }
+        }
         Section("State") {
             HStack {
                 Button("Read STATE") { Task { await link.attempt("read STATE") { try await link.read(BikeProtocol.state) } } }
@@ -166,9 +259,16 @@ struct LabView: View {
         }
     }
 
-    // MARK: Dispatch
+}
 
-    private var dispatchSection: some View {
+// MARK: - Dispatch
+
+private struct DispatchSection: View {
+    @EnvironmentObject private var link: BikeLink
+    @State private var dispatchText = #"{"type":"alarm/ARM"}"#
+    @State private var base64Text = false
+
+    var body: some View {
         Section {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
@@ -188,19 +288,6 @@ struct LabView: View {
             Text("Dispatch")
         } footer: {
             Text("Start with Alarm arm / Alarm off and watch the state for alarm.armed. Change assist only with the bike on a stand.")
-        }
-    }
-
-    // MARK: Log
-
-    private var logSection: some View {
-        Section {
-            ForEach(log.entries.suffix(8).reversed()) { e in
-                Text(log.line(e)).font(.caption2.monospaced()).foregroundStyle(color(e.kind))
-            }
-            NavigationLink("Full log (\(log.entries.count))") { LogView() }
-        } header: {
-            Text("Log")
         }
     }
 }
