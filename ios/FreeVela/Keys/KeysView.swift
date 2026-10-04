@@ -145,7 +145,7 @@ struct BikeCard: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Bike photo")
             VStack(alignment: .leading, spacing: 2) {
-                TextField("My Vela", text: $name)
+                TextField("My Bike", text: $name)
                     .font(.title3.weight(.semibold))
                     .focused($editing)
                     .submitLabel(.done)

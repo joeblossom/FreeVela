@@ -16,7 +16,7 @@ struct BikeKeys: Codable, Identifiable, Hashable {
 
     var title: String { displayName ?? id }
     /// What the screens call the bike.
-    var name: String { displayName ?? "My Vela" }
+    var name: String { displayName ?? "My Bike" }
 
     /// The same bike with a fresh random key and releasedKey. They must differ: the app writes
     /// releasedKey to RELEASE on each unlock, and the bike forgets its key if RELEASE matches it.
