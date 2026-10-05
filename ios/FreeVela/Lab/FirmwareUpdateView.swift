@@ -27,6 +27,15 @@ struct FirmwareUpdateView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.data]) { result in
             importFile(result)
         }
+        // On the screen, not the button: presentations inside Form rows can be torn down with the row.
+        .confirmationDialog("Install \(selected?.image.label ?? "")?", isPresented: $confirming, titleVisibility: .visible) {
+            Button("Install") {
+                guard let c = selected else { return }
+                Task { await updater.install(c, link: link) }
+            }
+        } message: {
+            if let c = selected { Text(updater.warnings(link, c).joined(separator: "\n\n")) }
+        }
     }
 
     private var bikeSection: some View {
@@ -88,14 +97,6 @@ struct FirmwareUpdateView: View {
                 Button(selected.map { "Install \($0.image.label)" } ?? "Choose an image") { confirming = true }
                     .fontWeight(.semibold)
                     .disabled(selected == nil || !blockers.isEmpty)
-                    .confirmationDialog("Install \(selected?.image.label ?? "")?", isPresented: $confirming, titleVisibility: .visible) {
-                        Button("Install") {
-                            guard let c = selected else { return }
-                            Task { await updater.install(c, link: link) }
-                        }
-                    } message: {
-                        if let c = selected { Text(updater.warnings(link, c).joined(separator: "\n\n")) }
-                    }
             }
             switch updater.stage {
             case .idle:

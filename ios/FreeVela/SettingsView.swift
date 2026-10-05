@@ -10,8 +10,12 @@ struct SettingsView: View {
     @AppStorage("units") private var units: Units = .kmh
     @AppStorage("appearance") private var appearance: Appearance = .system
     @AppStorage("paint") private var paint: Paint = .oxblood
-    @State private var confirmingReset = false
-    @State private var resetResult: String?
+    @State private var settingUp = false
+    @State private var adding = false
+    @State private var importing = false
+    @State private var pasting = false
+    @State private var keyError: String?
+    @State private var showBike = false
     @State private var topDraft: Double?
     @State private var showLab = false
 
@@ -22,9 +26,8 @@ struct SettingsView: View {
                 Form {
                     if let bike = session.bike { Section { BikeCard(bike: bike) }.listRowBackground(Color.clear) }
                     paintSection
-                    BikesSection()
-                    if session.bike != nil { keySection }
-                    if link.isUnlocked, link.can(.ebrake) || link.can(.ecoThreshold) { riding }
+                    BikesSection(onAdd: { adding = true }, error: keyError)
+                        if link.isUnlocked, link.can(.ebrake) || link.can(.ecoThreshold) { riding }
                     if link.isUnlocked, link.can(.motorTune) { motor }
                     if link.isUnlocked, link.can(.sleepTimer) { power }
                     display
@@ -61,8 +64,31 @@ struct SettingsView: View {
             .background { VStack(spacing: 0) { theme.paint.frame; theme.cream }.ignoresSafeArea() }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showLab) { LabView() }
+            .navigationDestination(isPresented: $showBike) { BikeDetailView(bikeID: session.selectedID ?? "") }
+            .confirmationDialog("Add a bike", isPresented: $adding, titleVisibility: .visible) {
+                Button("Set up a new bike") { settingUp = true }
+                Button("Import backup…") { importing = true }
+                Button("Paste keys…") { pasting = true }
+            } message: {
+                Text("Set up works without keys: it installs FreeVela firmware and pairs this phone. Or add keys you already have.")
+            }
+            .keyImport(importing: $importing, pasting: $pasting, error: $keyError)
+            .fullScreenCover(isPresented: $settingUp) {
+                SetupView(onCancel: { settingUp = false; session.bikesChanged(); session.autoConnect() },
+                          onFinish: { settingUp = false })
+                    .paintedScreen()
+                    .themed()
+            }
             #if DEBUG
-            .onAppear { if ProcessInfo.processInfo.arguments.contains("-demoLab") { showLab = true } }
+            .onAppear {
+                let args = ProcessInfo.processInfo.arguments
+                if args.contains("-demoLab") { showLab = true }
+                if args.contains("-demoBike") { showBike = true }
+                if args.contains("-demoPaste") { Task { try? await Task.sleep(for: .seconds(1)); pasting = true } }
+                if args.contains("-demoSetupCover") {
+                    Task { try? await Task.sleep(for: .seconds(1)); settingUp = true }
+                }
+            }
             #endif
         }
     }
@@ -111,41 +137,6 @@ struct SettingsView: View {
     }
 
     // MARK: Keys
-
-    private var keySection: some View {
-        Section {
-            Toggle(isOn: Binding(get: { session.keys.syncsWithICloud }, set: { session.keys.setICloudSync($0) })) {
-                SettingsRow("Sync with iCloud Keychain", "icloud.fill", plain: true)
-            }
-            if link.isUnlocked {
-                Button { confirmingReset = true } label: { SettingsRow("Reset keys…", "key.fill", destructive: true) }
-                    .disabled(session.busy != nil)
-                    .confirmationDialog("Reset keys?", isPresented: $confirmingReset, titleVisibility: .visible) {
-                        Button("Reset keys", role: .destructive) {
-                            Task {
-                                resetResult = await session.resetKeys()
-                                    ? "The bike has new keys, saved on this phone. Your old backup and any other phone with the old keys no longer work. Save a new key backup now."
-                                    : "The keys weren't changed. Stay next to the bike and try again, or share the log."
-                            }
-                        }
-                    } message: {
-                        Text("Makes new keys for this bike and pairs this phone with them. Old backups and other phones stop working.")
-                    }
-            }
-        } header: {
-            SectionHeader("Keys")
-        } footer: {
-            footer(session.keys.syncsWithICloud
-                   ? "Your keys are end-to-end encrypted in iCloud Keychain, so they come back on a new phone or after reinstalling. Turning this off removes them from iCloud and your other devices; this phone keeps them. Reset keys makes new ones; old backups and other phones stop working."
-                   : "Off: keys stay on this phone only. They usually survive deleting and reinstalling the app, but not a new phone. Reset keys makes new ones; old backups and other phones stop working.")
-        }
-        .paintRows()
-        .alert("Reset keys", isPresented: Binding(get: { resetResult != nil }, set: { if !$0 { resetResult = nil } })) {
-            Button("OK") { resetResult = nil }
-        } message: {
-            Text(resetResult ?? "")
-        }
-    }
 
     // MARK: Riding, motor, power
 

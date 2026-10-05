@@ -35,7 +35,7 @@ struct SignedOutView: View {
                 if let error { Text(error).font(.archivo(14, weight: 500)).foregroundStyle(.red) }
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "lock.fill").font(.system(size: 15))
-                    Text("Keys stay on this phone. Close the old Vela app — the bike talks to one phone at a time.")
+                    Text("Keys are end-to-end encrypted in your iCloud Keychain (you can turn that off). Close the old Vela app — the bike talks to one phone at a time.")
                         .font(.archivo(13, weight: 400))
                 }
                 .foregroundStyle(theme.inkMuted)

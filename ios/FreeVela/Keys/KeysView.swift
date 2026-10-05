@@ -2,29 +2,28 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The bikes on this phone: pick one, swipe to remove, or add keys from a backup or by pasting.
+/// The bikes on this phone (tap one for its keys) and "Add a bike…".
+/// Settings presents the add menu, importer and sheets itself: presentations attached inside a
+/// List/Form row are torn down with the row, which closed them straight away.
 struct BikesSection: View {
+    var onAdd: () -> Void
+    var error: String?
     @EnvironmentObject private var keys: KeyStore
     @EnvironmentObject private var session: Session
     @Environment(\.theme) private var theme
-    @State private var importing = false
-    @State private var pasting = false
-    @State private var settingUp = false
-    @State private var error: String?
 
     var body: some View {
         Section {
             ForEach(keys.bikes) { bike in
-                Button { session.selectedID = bike.id } label: {
+                NavigationLink { BikeDetailView(bikeID: bike.id) } label: {
                     HStack(spacing: 12) {
                         SettingsIcon("bicycle")
                         VStack(alignment: .leading, spacing: 0) {
                             Text(bike.name).font(.archivo(16, weight: 500)).foregroundStyle(theme.ink)
-                            Text("\(bike.id.prefix(8)) · \(bike.keyBytes != nil && bike.releasedKeyBytes != nil ? "keys OK" : "keys invalid")")
-                                .font(.footnote.monospaced()).foregroundStyle(theme.inkMuted)
+                            Text(subtitle(bike)).font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
                         }
                         Spacer()
-                        if bike.id == session.selectedID {
+                        if bike.id == session.selectedID, keys.bikes.count > 1 {
                             Image(systemName: "checkmark").font(.system(size: 16, weight: .bold)).foregroundStyle(theme.actionColor)
                         }
                     }
@@ -33,30 +32,22 @@ struct BikesSection: View {
                     Button("Remove", role: .destructive) { keys.remove(bike); session.bikesChanged() }
                 }
             }
-            Button { BackupShare.present(keys) } label: {
-                SettingsRow("Save key backup", "square.and.arrow.up",
-                            detail: keys.bikes.contains { keys.needsBackup.contains($0.id) } ? "Not saved yet" : nil)
-            }
-            Button { importing = true } label: { SettingsRow("Import backup…", "square.and.arrow.down") }
-            Button { pasting = true } label: { SettingsRow("Paste keys…", "doc.on.clipboard") }
-            Button { settingUp = true } label: { SettingsRow("Set up a new bike…", "person.badge.plus") }
+            Button(action: onAdd) { SettingsRow("Add a bike…", "plus") }
             if let error { Text(error).font(.footnote).foregroundStyle(.red) }
         } header: {
             SectionHeader("Bikes & keys")
         } footer: {
-            Text(keys.syncsWithICloud
-                 ? "Keys sync through iCloud Keychain to your other Apple devices. Swipe a bike to remove it."
-                 : "Keys stay on this phone. Save a backup somewhere safe: without one, a lost phone means a locked bike. Swipe a bike to remove it.")
+            Text("Tap a bike to see its keys, save a backup or sync them with iCloud Keychain.")
                 .font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
         }
         .paintRows()
-        .keyImport(importing: $importing, pasting: $pasting, error: $error)
-        .fullScreenCover(isPresented: $settingUp) {
-            SetupView(onCancel: { settingUp = false; session.bikesChanged(); session.autoConnect() },
-                      onFinish: { settingUp = false })
-                .paintedScreen()
-                .themed()
-        }
+    }
+
+    private func subtitle(_ bike: BikeKeys) -> String {
+        var parts = [String(bike.id.prefix(8))]
+        if keys.needsBackup.contains(bike.id) { parts.append("no backup yet") }
+        else if keys.syncsWithICloud { parts.append("in iCloud Keychain") }
+        return parts.joined(separator: " · ")
     }
 }
 

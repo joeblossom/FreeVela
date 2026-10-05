@@ -15,10 +15,19 @@ final class KeyStore: ObservableObject {
     /// Whether the keys sync through iCloud Keychain.
     @Published private(set) var syncsWithICloud = false
 
-    init() { (bikes, syncsWithICloud) = load() }
+    init() {
+        (bikes, syncsWithICloud) = load()
+        // On by default: new installs, and once for keys saved before this setting existed.
+        if !UserDefaults.standard.bool(forKey: "keySyncChosen") {
+            UserDefaults.standard.set(true, forKey: "keySyncChosen")
+            syncsWithICloud = true
+            if !bikes.isEmpty { save(bikes) }
+        }
+    }
 
     /// Turning it off removes the synced copy (from iCloud and the other devices); this phone keeps the keys.
     func setICloudSync(_ on: Bool) {
+        UserDefaults.standard.set(true, forKey: "keySyncChosen")
         syncsWithICloud = on
         save(bikes)
     }
