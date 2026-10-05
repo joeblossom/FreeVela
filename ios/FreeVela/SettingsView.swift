@@ -11,11 +11,11 @@ struct SettingsView: View {
     @AppStorage("appearance") private var appearance: Appearance = .system
     @AppStorage("paint") private var paint: Paint = .oxblood
     @State private var settingUp = false
-    @State private var adding = false
     @State private var importing = false
     @State private var pasting = false
     @State private var keyError: String?
     @State private var showBike = false
+    @State private var showAdd = false
     @State private var topDraft: Double?
     @State private var showLab = false
 
@@ -26,7 +26,8 @@ struct SettingsView: View {
                 Form {
                     if let bike = session.bike { Section { BikeCard(bike: bike) }.listRowBackground(Color.clear) }
                     paintSection
-                    BikesSection(onAdd: { adding = true }, error: keyError)
+                    BikesSection(onSetUp: { settingUp = true }, onImport: { importing = true },
+                                 onPaste: { pasting = true }, error: keyError)
                         if link.isUnlocked, link.can(.ebrake) || link.can(.ecoThreshold) { riding }
                     if link.isUnlocked, link.can(.motorTune) { motor }
                     if link.isUnlocked, link.can(.sleepTimer) { power }
@@ -65,12 +66,8 @@ struct SettingsView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showLab) { LabView() }
             .navigationDestination(isPresented: $showBike) { BikeDetailView(bikeID: session.selectedID ?? "") }
-            .confirmationDialog("Add a bike", isPresented: $adding, titleVisibility: .visible) {
-                Button("Set up a new bike") { settingUp = true }
-                Button("Import backup…") { importing = true }
-                Button("Paste keys…") { pasting = true }
-            } message: {
-                Text("Set up works without keys: it installs FreeVela firmware and pairs this phone. Or add keys you already have.")
+            .navigationDestination(isPresented: $showAdd) {
+                AddBikeView(onSetUp: { settingUp = true }, onImport: { importing = true }, onPaste: { pasting = true })
             }
             .keyImport(importing: $importing, pasting: $pasting, error: $keyError)
             .fullScreenCover(isPresented: $settingUp) {
@@ -84,6 +81,7 @@ struct SettingsView: View {
                 let args = ProcessInfo.processInfo.arguments
                 if args.contains("-demoLab") { showLab = true }
                 if args.contains("-demoBike") { showBike = true }
+                if args.contains("-demoAdd") { showAdd = true }
                 if args.contains("-demoPaste") { Task { try? await Task.sleep(for: .seconds(1)); pasting = true } }
                 if args.contains("-demoSetupCover") {
                     Task { try? await Task.sleep(for: .seconds(1)); settingUp = true }

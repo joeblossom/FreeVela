@@ -6,7 +6,9 @@ import UniformTypeIdentifiers
 /// Settings presents the add menu, importer and sheets itself: presentations attached inside a
 /// List/Form row are torn down with the row, which closed them straight away.
 struct BikesSection: View {
-    var onAdd: () -> Void
+    var onSetUp: () -> Void
+    var onImport: () -> Void
+    var onPaste: () -> Void
     var error: String?
     @EnvironmentObject private var keys: KeyStore
     @EnvironmentObject private var session: Session
@@ -32,7 +34,9 @@ struct BikesSection: View {
                     Button("Remove", role: .destructive) { keys.remove(bike); session.bikesChanged() }
                 }
             }
-            Button(action: onAdd) { SettingsRow("Add a bike…", "plus") }
+            NavigationLink { AddBikeView(onSetUp: onSetUp, onImport: onImport, onPaste: onPaste) } label: {
+                SettingsRow("Add a bike", "plus", plain: true)
+            }
             if let error { Text(error).font(.footnote).foregroundStyle(.red) }
         } header: {
             SectionHeader("Bikes & keys")
