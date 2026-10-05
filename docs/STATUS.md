@@ -101,7 +101,16 @@ probe (`fv.adc`); `firmware/out/freevela-0.2.0-beta2.bin`, 778,784 B, sha256 `84
 iCloud Drive → FreeVela Firmware, import only. App build 19: light On/Off (On = auto; always-on is
 switched to auto), controls wait for the bike to confirm, charging bolt, Charger probe.
 
+**FreeVela 0.2.0** (2026-10-04, QEMU-tested): everything above plus the public status `fv_info`
+(readable without keys) for new-owner setup. `firmware/out/freevela-0.2.0.bin`, 779,328 B,
+sha256 `c85b2d28…2bcc55`; GitHub pre-release `firmware-v0.2.0`; `FirmwareImage.setup`.
+The reset lock (`fv.lock`, `fv/LOCK_SET`) from the earlier betas is gone: the hold always resets.
+App: optional iCloud Keychain sync for keys (Settings → Keys); signed-out screen (set up / import / Vela account), the "Set up your bike" walkthrough
+(`NewOwner/`), keyless install, new-owner pairing, key-backup tracking (Home banner, Settings → Keys).
+
 Still to do:
+- On the bike: new-owner setup. Save a backup, remove the bike, run
+  Set up my bike (FreeVela path); later the full path from Vela's original firmware.
 - On the bike: Charger probe readings unplugged vs plugged in; does `pwr.chr` follow charging?
 - On the bike: record a ride on default settings, then with a higher top speed; try Throttle with the
   rear wheel off the ground first (brake must cut it).

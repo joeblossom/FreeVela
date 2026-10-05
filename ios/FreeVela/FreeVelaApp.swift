@@ -54,7 +54,8 @@ private struct RootView: View {
             }
         }
         .themed()
-        .preferredColorScheme(appearance.scheme)
+        .onAppear { apply(appearance) }
+        .onChange(of: appearance) { apply(appearance) }
         .onAppear {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-demo") {
@@ -77,5 +78,18 @@ private struct RootView: View {
         .onChange(of: session.selectedID) { session.autoConnect() }
         .onChange(of: link.bluetooth) { session.autoConnect() }
         .onChange(of: scenePhase) { if scenePhase == .active { session.autoConnect() } }
+    }
+
+    /// SwiftUI's preferredColorScheme(nil) doesn't undo an earlier light/dark choice, so set the
+    /// windows' style directly. Sheets and covers follow; Ride stays dark on its own.
+    private func apply(_ appearance: Appearance) {
+        let style: UIUserInterfaceStyle = switch appearance {
+        case .system: .unspecified
+        case .light: .light
+        case .dark: .dark
+        }
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            scene.windows.forEach { $0.overrideUserInterfaceStyle = style }
+        }
     }
 }

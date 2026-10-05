@@ -1,15 +1,27 @@
 import Foundation
 import Security
 
-/// Bike credentials, persisted as one JSON blob in the Keychain
-/// (this device only, never synced).
+/// Bike credentials, persisted as one JSON blob in the Keychain. By default it stays on this phone
+/// (it usually survives deleting and reinstalling the app). With iCloud sync on, the item is
+/// synchronizable, so it's end-to-end encrypted in iCloud Keychain and appears on the person's other devices.
 final class KeyStore: ObservableObject {
     @Published private(set) var bikes: [BikeKeys] = []
+    /// Bikes whose keys were made on this phone (setup or Reset keys) and haven't been backed up yet.
+    @Published private(set) var needsBackup: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "needsBackup") ?? [])
 
     private let account = "bikes"
     private let service = "FreeVela"
 
-    init() { bikes = load() }
+    /// Whether the keys sync through iCloud Keychain.
+    @Published private(set) var syncsWithICloud = false
+
+    init() { (bikes, syncsWithICloud) = load() }
+
+    /// Turning it off removes the synced copy (from iCloud and the other devices); this phone keeps the keys.
+    func setICloudSync(_ on: Bool) {
+        syncsWithICloud = on
+        save(bikes)
+    }
 
     func add(_ new: [BikeKeys]) {
         var merged = bikes
@@ -22,6 +34,15 @@ final class KeyStore: ObservableObject {
     func remove(_ bike: BikeKeys) {
         save(bikes.filter { $0.id != bike.id })
         BikePhoto.remove(bike.id)
+        setNeedsBackup(needsBackup.subtracting([bike.id]))
+    }
+
+    func markNeedsBackup(_ id: String) { setNeedsBackup(needsBackup.union([id])) }
+    func markBackedUp(_ ids: [String]) { setNeedsBackup(needsBackup.subtracting(ids)) }
+
+    private func setNeedsBackup(_ ids: Set<String>) {
+        needsBackup = ids
+        UserDefaults.standard.set(Array(ids), forKey: "needsBackup")
     }
 
     func rename(_ id: String, to name: String) {
@@ -29,18 +50,23 @@ final class KeyStore: ObservableObject {
         save(bikes.map { var b = $0; if b.id == id { b.displayName = trimmed.isEmpty ? nil : trimmed }; return b })
     }
 
+    /// Matches the item whether or not it syncs.
     private var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
-         kSecAttrAccount as String: account]
+         kSecAttrAccount as String: account,
+         kSecAttrSynchronizable as String: kSecAttrSynchronizableAny]
     }
 
-    private func load() -> [BikeKeys] {
+    private func load() -> ([BikeKeys], Bool) {
         var q = query
         q[kSecReturnData as String] = true
+        q[kSecReturnAttributes as String] = true
         var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return [] }
-        return (try? JSONDecoder().decode([BikeKeys].self, from: data)) ?? []
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let item = out as? [String: Any],
+              let data = item[kSecValueData as String] as? Data else { return ([], false) }
+        let synced = (item[kSecAttrSynchronizable as String] as? NSNumber)?.boolValue ?? false
+        return ((try? JSONDecoder().decode([BikeKeys].self, from: data)) ?? [], synced)
     }
 
     private func save(_ list: [BikeKeys]) {
@@ -48,7 +74,9 @@ final class KeyStore: ObservableObject {
         SecItemDelete(query as CFDictionary)
         var q = query
         q[kSecValueData as String] = data
-        q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        q[kSecAttrSynchronizable as String] = syncsWithICloud
+        // A synced item can't be "this device only".
+        q[kSecAttrAccessible as String] = syncsWithICloud ? kSecAttrAccessibleAfterFirstUnlock : kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(q as CFDictionary, nil)
         bikes = list
     }

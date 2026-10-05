@@ -5,6 +5,8 @@ import SwiftUI
 struct Theme {
     var paint: PaintColors
     var ink, inkMuted, cream, surface, tile, toggleOff: Color
+    /// The interim dark palette is in use.
+    var dark: Bool
 
     // Ride is always dark.
     static let rideBg = Color(hex: 0x16110E)
@@ -17,6 +19,7 @@ struct Theme {
 
     init(paint: Paint, dark: Bool) {
         self.paint = paint.colors
+        self.dark = dark
         if dark {
             ink = Color(hex: 0xF1E9DA)
             inkMuted = Color(hex: 0x9C8F82)

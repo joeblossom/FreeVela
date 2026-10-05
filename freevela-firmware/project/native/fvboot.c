@@ -47,6 +47,7 @@ extern esp_err_t esp_ota_set_boot_partition(const esp_partition_t *partition);
 
 static volatile int gConfirmed = 1;
 static uint32_t gBoots;
+static TickType_t gTrialStart;
 
 /* Set by the trial timer, then the chip restarts and freevela_boot_check does the switch. Flash
    writes from the timer task can stall (seen in QEMU while the BLE controller holds the other
@@ -135,6 +136,7 @@ void freevela_boot_check(void)
 	}
 	printf("fvboot: trial boot %u of %u (confirm by unlocking from the app within %u s)\n",
 		(unsigned)gBoots, (unsigned)FV_TRIAL_BOOTS, (unsigned)FV_TRIAL_SECONDS);
+	gTrialStart = xTaskGetTickCount();
 	xTaskCreate(trialTask, "fvtrial", 4096, NULL, 5, NULL);
 }
 
@@ -151,6 +153,19 @@ void xs_fvboot_confirm(xsMachine *the)
 	}
 	gConfirmed = 1;
 	printf("fvboot: confirmed\n");
+}
+
+/* JS: trialLeft() — seconds left in this boot's trial window, or 0 once confirmed. */
+void xs_fvboot_trial_left(xsMachine *the)
+{
+	uint32_t ran = (uint32_t)((xTaskGetTickCount() - gTrialStart) * portTICK_PERIOD_MS / 1000);
+	xsmcSetInteger(xsResult, gConfirmed || ran >= FV_TRIAL_SECONDS ? 0 : (int)(FV_TRIAL_SECONDS - ran));
+}
+
+/* JS: trialBoots() — how many unconfirmed boots the trial allows. */
+void xs_fvboot_trial_boots(xsMachine *the)
+{
+	xsmcSetInteger(xsResult, FV_TRIAL_BOOTS);
 }
 
 /* JS: trial() — boots so far while on trial, or 0 once confirmed. */

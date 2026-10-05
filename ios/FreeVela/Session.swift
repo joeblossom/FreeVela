@@ -12,6 +12,8 @@ final class Session: ObservableObject {
     }
     /// What the app is doing right now ("Looking for your bike…"), or nil.
     @Published private(set) var busy: String?
+    /// Set while "Set up your bike" runs, so auto-connect doesn't take the bike over.
+    var setupRunning = false
 
     /// What the user just picked, by STATE path, shown until the bike reports it (see Controls.swift).
     @Published var pending: [String: Pending] = [:]
@@ -55,7 +57,7 @@ final class Session: ObservableObject {
 
     /// Looks for the bike once whenever the app opens or comes back, if it isn't connected.
     func autoConnect() {
-        guard bike != nil, busy == nil, !updater.running, link.bluetooth == .poweredOn,
+        guard bike != nil, busy == nil, !setupRunning, !updater.running, link.bluetooth == .poweredOn,
               link.phase != .connecting, link.phase != .scanning, !connected else { return }
         busy = "Looking for your bike…"
         Task { await connect() }
@@ -81,6 +83,7 @@ final class Session: ObservableObject {
         defer { busy = nil }
         guard let new = await link.resetKeys() else { return false }
         keys.add([new])
+        keys.markNeedsBackup(new.id)
         bikesChanged()
         return true
     }

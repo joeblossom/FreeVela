@@ -10,7 +10,7 @@ enum Capability: String, CaseIterable {
     case assistStrength = "assist-strength"
     case softStart = "soft-start"
     case pushState = "push-state"
-    /// Brake + button for 15 s erases the key, unless the owner locked it (`fv.lock`).
+    /// Brake + button for 15 s, wheel still, erases the key so a new phone can pair.
     case keyReset = "key-reset"
     /// Goes to sleep after `fv.sleep` minutes without use (0 = never); set with fv/SLEEP_SET.
     case sleepTimer = "sleep-timer"
@@ -69,4 +69,20 @@ struct FirmwareInfo: Equatable {
         case .freeVela: "FreeVela \(version)"
         }
     }
+}
+
+/// FreeVela 0.2.0+ public status (`fv_info`), readable before this phone owns the bike.
+struct BikeInfo: Decodable, Equatable {
+    /// FreeVela firmware version.
+    let ver: String
+    /// 1 when the bike has an owner key.
+    let keyed: Int
+    /// Seconds left in this boot's trial window; 0 once confirmed.
+    let trial: Int
+    /// Unconfirmed boots the trial still allows.
+    let boots: Int
+    /// Whole seconds of the current brake + button hold (0–15).
+    let hold: Int
+    /// Battery %.
+    let fuel: Int
 }

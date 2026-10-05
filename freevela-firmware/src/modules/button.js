@@ -7,6 +7,9 @@ import { log } from "lib/sys";
 const button1 = new Monitor({ pin: 3, mode: Digital.InputPullUp, edge: Monitor.Falling | Monitor.Rising });
 const button2 = new Monitor({ pin: 0, mode: Digital.InputPullUp, edge: Monitor.Falling | Monitor.Rising });
 
+// FreeVela: live pin read for the key-reset gesture (modules/fv). Active low.
+export const buttonHeld = () => !button1.read() || !button2.read();
+
 const initialState = false;
 
 const reducer = (state = initialState, action) => {

@@ -207,18 +207,16 @@ once confirmed (see "Trial boot" above).
 
 ### Key reset (FreeVela 0.2.0, QEMU-tested, not yet on a bike)
 
-- **From the app (any firmware):** Settings → Keys → **Reset keys** writes the current `key` to
+- **From the app (any firmware):** Settings → Keys → **Reset keys…** writes the current `key` to
   RELEASE (the bike forgets it), then a new random `key` to KEY (the bike registers it and stays
   unlocked). The new `releasedKey` is random and different from `key`, since a RELEASE write that
   matches the key releases the bike.
 - **From the bike:** hold the brake lever and the handlebar button together for 15 s, wheel still.
   Chirps every second from 5 s, then a long tone; the key is erased and the bike restarts. The hold
   must start after the bike is awake. The next phone that writes KEY becomes the owner.
-- **Reset lock:** STATE `fv.lock` is 1 when the bike-side reset is locked. The first unlock or
-  pairing on FreeVela firmware locks it; `{"type":"fv/LOCK_SET","payload":0|1}` turns it off or on
-  (Settings → Keys → **Reset from the bike**). A RELEASE clears it, so the next owner's first unlock
-  locks it again. A bike installed from Vela firmware with keys nobody has is unlocked until someone
-  pairs, so a stranded owner can install FreeVela, hold the controls and pair as the new owner.
+- **No lock:** the hold always works (wheel still), so anyone with the bike in hand can reset it and
+  pair a new phone. That keeps new-owner setup working for any bike. (A reset lock in early 0.2.0
+  test builds was removed.)
 - **Firmware updates need the unlock** on FreeVela 0.2.0: OTA writes from a phone that hasn't
   unlocked are refused and the phone is disconnected.
 
@@ -266,6 +264,27 @@ once confirmed (see "Trial boot" above).
 - STATE `fv.adc` = `{c0, c3, c6, c7}`: raw 0–1023 readings of ADC1 channels 0, 3, 6 (GPIO 36, 39, 34,
   unused by the firmware) and 7 (GPIO 35, battery), read when STATE is read. To find a charger
   signal: compare them unplugged vs plugged in (app: Developer tools → State → Charger probe).
+
+### Public status and new-owner setup (FreeVela 0.2.0, QEMU-tested, not yet on a bike)
+
+- **Device id:** the scan response carries 7 bytes of service data under the auth service UUID;
+  their lowercase hex is the device id that key backups use (`BikeKeys.id`).
+- **`fv_info`** (service `00000400-…`, characteristic `00000401-…`, read, **no unlock needed**):
+  JSON `{ver, keyed, trial, boots, hold, fuel}` — FreeVela version; 1 if the bike has an owner key;
+  seconds left in this boot's trial window (0 once confirmed); unconfirmed boots left; whole seconds
+  of the current brake + button hold (0–15); battery %. Vela firmware doesn't have it.
+- **Setup without keys** (app: signed out → Set up my bike):
+  1. Find the bike and connect without unlocking.
+  2. Vela firmware (and FreeVela 0.1.0) accepts a firmware install without the unlock, so the app
+     installs FreeVela 0.2.0 (downloaded from the GitHub release, checked by size and SHA-256). It
+     confirms the install from `fv_info.ver` after the restart. The bike can't report its battery
+     without keys on Vela firmware, so the app asks for at least 40%; on FreeVela it checks `fuel`.
+  3. The new firmware runs on trial: 10 minutes per boot, 3 unconfirmed boots. The owner holds the
+     brake lever + button for 15 s (`hold` counts it live); the bike erases its key and restarts.
+  4. The app writes a new random `key` to KEY. A keyless bike registers it and unlocks, which
+     confirms the trial. A bike that already has a key refuses and disconnects ("another phone got
+     there first").
+  5. The app offers a key backup (`vela-backup.json`).
 
 Capability names the app knows: `assist-strength`, `soft-start`, `push-state`, `key-reset`, `sleep-timer`, `motor-tune`. Unknown names are
 ignored, so firmware can add capabilities before the app supports them. To add a new verified Vela

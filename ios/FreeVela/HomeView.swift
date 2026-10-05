@@ -205,6 +205,7 @@ struct HomeView: View {
 struct StatusBanner: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var link: BikeLink
+    @EnvironmentObject private var keys: KeyStore
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -246,7 +247,10 @@ struct StatusBanner: View {
     private var content: Content? {
         switch session.status {
         case .connected:
-            return nil
+            guard let bike = session.bike, keys.needsBackup.contains(bike.id) else { return nil }
+            return Content(symbol: "key.fill", title: "No key backup yet.",
+                           text: "Without one, a lost phone means a locked bike.",
+                           button: ("Save", { BackupShare.present(keys) }))
         case .bluetooth(let state):
             return Content(symbol: "antenna.radiowaves.left.and.right.slash", title: "Bluetooth is \(state).",
                            text: "FreeVela needs Bluetooth to talk to your bike.")

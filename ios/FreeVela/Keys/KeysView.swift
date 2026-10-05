@@ -9,6 +9,7 @@ struct BikesSection: View {
     @Environment(\.theme) private var theme
     @State private var importing = false
     @State private var pasting = false
+    @State private var settingUp = false
     @State private var error: String?
 
     var body: some View {
@@ -32,16 +33,30 @@ struct BikesSection: View {
                     Button("Remove", role: .destructive) { keys.remove(bike); session.bikesChanged() }
                 }
             }
+            Button { BackupShare.present(keys) } label: {
+                SettingsRow("Save key backup", "square.and.arrow.up",
+                            detail: keys.bikes.contains { keys.needsBackup.contains($0.id) } ? "Not saved yet" : nil)
+            }
             Button { importing = true } label: { SettingsRow("Import backup…", "square.and.arrow.down") }
             Button { pasting = true } label: { SettingsRow("Paste keys…", "doc.on.clipboard") }
+            Button { settingUp = true } label: { SettingsRow("Set up a new bike…", "person.badge.plus") }
             if let error { Text(error).font(.footnote).foregroundStyle(.red) }
         } header: {
             SectionHeader("Bikes & keys")
         } footer: {
-            Text("Keys stay on this phone. Swipe a bike to remove it.").font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
+            Text(keys.syncsWithICloud
+                 ? "Keys sync through iCloud Keychain to your other Apple devices. Swipe a bike to remove it."
+                 : "Keys stay on this phone. Save a backup somewhere safe: without one, a lost phone means a locked bike. Swipe a bike to remove it.")
+                .font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
         }
         .paintRows()
         .keyImport(importing: $importing, pasting: $pasting, error: $error)
+        .fullScreenCover(isPresented: $settingUp) {
+            SetupView(onCancel: { settingUp = false; session.bikesChanged(); session.autoConnect() },
+                      onFinish: { settingUp = false })
+                .paintedScreen()
+                .themed()
+        }
     }
 }
 

@@ -10,6 +10,10 @@ Not affiliated with Vela.
 > ([`freevela-firmware/`](freevela-firmware/README.md)).
 > See [`docs/protocol.md`](docs/protocol.md) for what's verified.
 
+No keys? The app can set a bike up for a new owner: it installs FreeVela firmware, you hold
+the brake lever and the handlebar button for 15 seconds to reset the bike's keys, and the phone
+pairs as the owner (see [`docs/protocol.md`](docs/protocol.md), "Public status and new-owner setup").
+
 ## 1. Rescue your keys — do this now
 
 Each bike has a shared secret (`key` + `releasedKey`) that lives only in Vela's

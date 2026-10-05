@@ -201,11 +201,6 @@ extension Session {
         send("motor.ebc", on ? "1" : "0", #"{"type":"motor/EBC_SET","payload":\#(on ? 1 : 0)}"#)
     }
 
-    /// FreeVela 0.2.0+: whether brake + button for 15 s may erase the key (`fv.lock` 0) or not (1).
-    func setBikeReset(_ allowed: Bool) {
-        send("fv.lock", allowed ? "0" : "1", #"{"type":"fv/LOCK_SET","payload":\#(allowed ? 0 : 1)}"#)
-    }
-
     private func send(_ path: String, _ expected: String, _ json: String) {
         expect(path, expected)
         Task { await link.dispatch(json, base64Text: false) }

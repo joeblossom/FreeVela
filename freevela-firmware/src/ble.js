@@ -9,6 +9,7 @@ import udid from "udid"; // imported but never referenced in this module
 import { udidBytes } from "udid";
 import OTA from "ota";
 import { restart } from "lib/sys";
+import { info as fvInfo } from "modules/fv";
 
 // Runs at import time (every boot). `let` because the ota_state handler reassigns it.
 let ota = new OTA();
@@ -84,6 +85,9 @@ class BLE extends BLEServer {
 			return this.authIV;
 		if (name === "redux_state" && this.authorized)
 			return JSON.stringify(this.state);
+		// FreeVela: public status for setting up a bike without its keys (modules/fv `info`).
+		if (name === "fv_info")
+			return fvInfo();
 	}
 	onCharacteristicWritten({ name }, value) {
 		switch (name) {
@@ -136,9 +140,20 @@ class BLE extends BLEServer {
 				this.disconnect();
 				break;
 			case "ota_data":
+				// FreeVela: firmware updates need the unlock handshake.
+				if (!this.authorized) {
+					trace("unauthenticated ota.\n");
+					this.disconnect();
+					break;
+				}
 				ota.write(value.buffer);
 				break;
 			case "ota_state":
+				if (!this.authorized) {
+					trace("unauthenticated ota.\n");
+					this.disconnect();
+					break;
+				}
 				try {
 					ota.complete();
 					restart();

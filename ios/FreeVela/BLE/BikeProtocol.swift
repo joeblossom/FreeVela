@@ -21,6 +21,10 @@ enum BikeProtocol {
     static let otaState        = uuid("00000301")  // write: any byte = install what was sent
     static let otaData         = uuid("00000302")  // write: raw image bytes, in order
 
+    /// FreeVela 0.2.0+: public status, readable without keys (see BikeInfo).
+    static let fvService = uuid("00000400")
+    static let fvInfo    = uuid("00000401")
+
     static let scanServices = [authService, reduxService]
 
     static func name(of uuid: CBUUID) -> String? {
@@ -35,6 +39,8 @@ enum BikeProtocol {
         case firmwareService: "Firmware update"
         case otaState: "OTA state (install)"
         case otaData: "OTA data"
+        case fvService: "FreeVela service"
+        case fvInfo: "FV_INFO"
         default: nil
         }
     }

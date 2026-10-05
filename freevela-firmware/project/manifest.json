@@ -12,7 +12,7 @@
 	},
 	"config": {
 		"version": "2306052112",
-		"fvVersion": "0.1.0"
+		"fvVersion": "0.2.0"
 	},
 	"modules": {
 		"*": [

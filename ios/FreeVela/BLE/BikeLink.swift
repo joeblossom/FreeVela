@@ -11,6 +11,8 @@ final class BikeLink: NSObject, ObservableObject {
         var name: String?
         var rssi: Int
         var services: [CBUUID]
+        /// The bike's device id from the scan response (the id in key backups), lowercase hex.
+        var deviceID: String?
         var id: UUID { peripheral.identifier }
         var advertisesVela: Bool { services.contains(where: BikeProtocol.scanServices.contains) }
     }
@@ -70,6 +72,12 @@ final class BikeLink: NSObject, ObservableObject {
     }
 
     var connectedName: String? { peripheral?.name }
+
+    /// The device id of the connected (or last) bike, from its advertisement.
+    var connectedDeviceID: String? {
+        guard let p = peripheral else { return nil }
+        return found.first { $0.id == p.identifier }?.deviceID
+    }
 
     // MARK: Scan / connect
 
@@ -317,6 +325,43 @@ final class BikeLink: NSObject, ObservableObject {
         return new
     }
 
+    // MARK: New owner
+
+    /// FreeVela 0.2.0+: the public status (firmware, owner key, trial, reset hold, battery).
+    /// Nil on Vela's firmware, which doesn't have it.
+    func readInfo() async -> BikeInfo? {
+        guard characteristic(BikeProtocol.fvInfo) != nil,
+              let data = try? await read(BikeProtocol.fvInfo, quiet: true) else { return nil }
+        return try? JSONDecoder().decode(BikeInfo.self, from: data)
+    }
+
+    enum PairResult { case paired, alreadyOwned, failed }
+
+    /// Gives a bike that has no owner key this phone's new key. The bike registers it and unlocks;
+    /// a bike that already has an owner refuses and disconnects.
+    func pairNewOwner(_ keys: BikeKeys) async -> PairResult {
+        guard let key = keys.keyBytes else { return .failed }
+        bike = keys
+        await acquire("command")
+        defer { release("command") }
+        log.add(.info, "— pair as new owner (fp \(BikeKeys.fingerprint(key))) —")
+        do {
+            try await write(BikeProtocol.key, key, logAs: "<new key>")
+            try await Task.sleep(for: .milliseconds(300))
+            guard try await read(BikeProtocol.state).first == UInt8(ascii: "{") else {
+                log.add(.error, "pair: the bike didn't accept the key (it may already have an owner)")
+                return .alreadyOwned
+            }
+        } catch {
+            log.add(.error, "pair: \(errorText(error))")
+            return phase == .connected ? .failed : .alreadyOwned
+        }
+        log.add(.ok, "paired as the new owner")
+        setNotify(true)
+        startPolling()
+        return .paired
+    }
+
     /// The expected happy path from docs/protocol.md, stopping at the first surprise.
     func runAuth(writeRelease: Bool) async {
         guard bike != nil else { log.add(.error, "load a bike's keys first"); return }
@@ -532,13 +577,16 @@ extension BikeLink: CBCentralManagerDelegate {
         MainActor.assumeIsolated {
             let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
             let uuids = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
+            let serviceData = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data]
+            let deviceID = serviceData?[BikeProtocol.authService].map { $0.map { String(format: "%02x", $0) }.joined() }
             let rssi = RSSI.intValue
             if let i = found.firstIndex(where: { $0.id == peripheral.identifier }) {
                 found[i].rssi = rssi
                 if let name { found[i].name = name }
                 if !uuids.isEmpty { found[i].services = uuids }
+                if let deviceID { found[i].deviceID = deviceID }
             } else {
-                found.append(Found(peripheral: peripheral, name: name, rssi: rssi, services: uuids))
+                found.append(Found(peripheral: peripheral, name: name, rssi: rssi, services: uuids, deviceID: deviceID))
             }
         }
     }

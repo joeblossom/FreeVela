@@ -15,6 +15,9 @@ struct FirmwareImage: Identifiable, Hashable {
     var url: URL? = nil
     var id: String { sha256 }
 
+    /// The image new-owner setup installs.
+    static var setup: FirmwareImage { known.last { $0.freeVela && $0.url != nil }! }
+
     static let known: [FirmwareImage] = [
         FirmwareImage(name: "Vela 2306052112 (original)", version: "2306052112", freeVela: false,
                       size: 1_083_232, sha256: "b41f83d63310defd2543595a6a9efa75a97ed5ab987b14beba2ade5f5a8c28ea"),
@@ -30,6 +33,11 @@ struct FirmwareImage: Identifiable, Hashable {
         // beta1 plus charging from the battery trend and the analog probe (`fv.adc`). Test build.
         FirmwareImage(name: "FreeVela 0.2.0-beta2 (test)", version: "0.2.0-beta2", freeVela: true,
                       size: 778_784, sha256: "84181676772388e7e14bd11503541c750c37a75b7618af497a04944c67979819"),
+        // Key reset (brake + button, no lock), sleep timer, motor settings, charging, and the public status (fv_info) that
+        // lets a phone without keys set the bike up. The image new-owner setup installs.
+        FirmwareImage(name: "FreeVela 0.2.0 (pre-release)", version: "0.2.0", freeVela: true,
+                      size: 779_328, sha256: "c85b2d284f5a8aa080df3309032976eeb99a4fdab076f1afa008b42f4c2bcc55",
+                      url: release("firmware-v0.2.0", "freevela-0.2.0.bin")),
     ]
 
     private static func release(_ tag: String, _ file: String) -> URL? {
@@ -281,6 +289,60 @@ final class FirmwareUpdater: ObservableObject {
         }
     }
 
+    /// New-owner setup: installs on a bike this phone has no keys for (Vela's firmware accepts that).
+    /// The bike must be connected (not unlocked). Success means it restarted and its public status
+    /// (`fv_info`, FreeVela 0.2.0+) reports the new version.
+    func installKeyless(_ c: CheckedImage, link: BikeLink) async -> Bool {
+        guard !running else { return false }
+        guard link.phase == .connected, link.ready, link.firmwareChunkSize != nil else {
+            stage = .failed(UpdateError.noService.localizedDescription)
+            return false
+        }
+        cancelRequested = false
+        UIApplication.shared.isIdleTimerDisabled = true
+        defer { UIApplication.shared.isIdleTimerDisabled = false }
+        let log = link.log
+        log.add(.info, "— firmware install without keys → \(c.image.label) (\(c.data.count) B, sha256 \(c.image.sha256.prefix(12))…) —")
+        do {
+            if dirtyBoot != nil { try await resetSession(link) }
+            try await transfer(c, link)
+        } catch {
+            await abandon(link, error, keyless: true)
+            return false
+        }
+        stage = .working("Installing…")
+        try? await Task.sleep(for: .milliseconds(200))
+        do {
+            try await link.writeFirmwareService(BikeProtocol.otaState, Data([1]), timeout: 30)
+            log.add(.info, "install command acknowledged")
+        } catch {
+            log.add(.info, "install command: \(error.localizedDescription) (expected if the bike restarted)")
+        }
+        dirtyBoot = nil
+        stage = .working("Restarting the bike…")
+        guard await waitUntil(seconds: 30, { link.phase != .connected }) else {
+            fail(log, "The bike didn't restart, so it didn't accept the firmware. It's still on its old firmware.")
+            return false
+        }
+        log.add(.info, "bike disconnected (restarting)")
+        try? await Task.sleep(for: .seconds(5))
+        let deadline = Date().addingTimeInterval(120)
+        while Date() < deadline {
+            if await link.connectAndWait(timeout: 15), let info = await link.readInfo() {
+                if info.ver == c.image.version {
+                    stage = .succeeded("Installed. The bike restarted on \(c.image.label).")
+                    log.add(.ok, "firmware install confirmed: \(c.image.label), trial \(info.trial) s left")
+                    return true
+                }
+                fail(log, "The bike restarted but reports FreeVela \(info.ver), not \(c.image.label).")
+                return false
+            }
+            try? await Task.sleep(for: .seconds(3))
+        }
+        fail(log, "The bike restarted, but FreeVela couldn't find it again within 2 minutes.")
+        return false
+    }
+
     private func transfer(_ c: CheckedImage, _ link: BikeLink) async throws {
         guard let chunk = link.firmwareChunkSize, chunk >= 20 else { throw UpdateError.noService }
         let size = c.data.count
@@ -318,9 +380,9 @@ final class FirmwareUpdater: ObservableObject {
         dirtyBoot = nil
     }
 
-    private func abandon(_ link: BikeLink, _ error: Error) async {
+    private func abandon(_ link: BikeLink, _ error: Error, keyless: Bool = false) async {
         if link.phase == .connected, dirtyBoot != nil { try? await resetSession(link) }
-        if link.phase == .connected { link.startPolling() }
+        if link.phase == .connected, !keyless { link.startPolling() }
         var why = (error as? UpdateError) == .canceled ? "Canceled." : "The transfer stopped: \(error.localizedDescription)."
         why += " The bike is still on its old firmware."
         if dirtyBoot != nil {

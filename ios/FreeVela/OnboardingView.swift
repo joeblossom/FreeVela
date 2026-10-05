@@ -1,66 +1,28 @@
 import SwiftUI
 
-/// First run: add your bike's keys, then wake and connect it.
+/// First run: signed out (set up the bike, or add keys), then wake and connect it.
 struct OnboardingView: View {
     var onFinish: () -> Void
     @EnvironmentObject private var keys: KeyStore
-    @Environment(\.theme) private var theme
-    @State private var importing = false
-    @State private var pasting = false
-    @State private var error: String?
+    @State private var settingUp = Self.demoSetup
+
+    #if DEBUG
+    private static let demoSetup = ProcessInfo.processInfo.arguments.contains("-demoSetup")
+    #else
+    private static let demoSetup = false
+    #endif
 
     var body: some View {
         Group {
-            if keys.bikes.isEmpty {
-                welcome
+            if settingUp {
+                SetupView(onCancel: { settingUp = false }, onFinish: onFinish)
+            } else if keys.bikes.isEmpty {
+                SignedOutView { settingUp = true }
             } else {
                 WakeView(onFinish: onFinish)
             }
         }
         .paintedScreen()
-    }
-
-    private var welcome: some View {
-        PaintedLayout {
-            VStack(alignment: .leading, spacing: 14) {
-                Image("Logo")
-                    .resizable()
-                    .frame(width: 72, height: 72)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(theme.paint.on, lineWidth: 2))
-                Text("Keep your Vela riding").display(44).lineSpacing(-8)
-                Text("FreeVela talks to your bike directly over Bluetooth. No Vela app or servers needed.")
-                    .font(.archivo(17, weight: 400))
-                    .opacity(0.9)
-            }
-        } panel: {
-            VStack(alignment: .leading, spacing: 20) {
-                point("key.fill", "Your bike's keys", "Download vela-backup.json from free-my-vela.html on a computer, then AirDrop it here.")
-                point("lock.fill", "Stays on this phone", "Keys are never sent anywhere or written to the log.")
-                point("iphone", "Close the old Vela app", "The bike only talks to one phone at a time.")
-                if let error { Text(error).font(.archivo(14, weight: 500)).foregroundStyle(.red) }
-                VStack(spacing: 6) {
-                    InkBarButton(title: "Import backup…", symbol: "arrow.right") { importing = true }
-                    Button { pasting = true } label: {
-                        Text("Paste keys instead").display(16, tracking: 0.04).foregroundStyle(theme.ink)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.top, 6)
-            }
-        }
-        .keyImport(importing: $importing, pasting: $pasting, error: $error)
-    }
-
-    private func point(_ symbol: String, _ title: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            SettingsIcon(symbol)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).display(18, tracking: 0.02).foregroundStyle(theme.ink)
-                Text(text).font(.archivo(15, weight: 400)).foregroundStyle(theme.inkMuted)
-            }
-        }
     }
 }
 
@@ -156,6 +118,7 @@ struct PaintedLayout<Band: View, Panel: View>: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 24)
                     .padding(.bottom, 36 + 28)
+                    .background(theme.paint.frame)
                 panel
                     .padding(.top, 28)
                     .padding(.horizontal, 20)

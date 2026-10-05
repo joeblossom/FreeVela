@@ -90,15 +90,19 @@ struct SettingsIcon: View {
     }
 }
 
-/// Icon + title. Action rows use the paint color for the title; `plain` rows (toggles, links, values) use ink.
+/// Icon + title. Action rows (buttons, share links) end in a chevron, with an optional detail before it;
+/// `plain` rows (toggles, navigation links, values) don't. Titles are ink, or red for destructive actions,
+/// so they read on every paint in light and dark.
 struct SettingsRow: View {
     @Environment(\.theme) private var theme
     var title: String
     var symbol: String
     var plain = false
     var destructive = false
-    init(_ title: String, _ symbol: String, _ color: Color = .clear, plain: Bool = false, destructive: Bool = false) {
-        self.title = title; self.symbol = symbol; self.plain = plain; self.destructive = destructive
+    var detail: String?
+    init(_ title: String, _ symbol: String, _ color: Color = .clear, plain: Bool = false, destructive: Bool = false,
+         detail: String? = nil) {
+        self.title = title; self.symbol = symbol; self.plain = plain; self.destructive = destructive; self.detail = detail
     }
 
     var body: some View {
@@ -106,14 +110,21 @@ struct SettingsRow: View {
             SettingsIcon(symbol)
             Text(title)
                 .font(.archivo(16, weight: 500))
-                .foregroundStyle(destructive ? Color.red : plain ? theme.ink : theme.actionColor)
+                .foregroundStyle(destructive ? Color.red : theme.ink)
+            if !plain {
+                Spacer(minLength: 4)
+                if let detail { Text(detail).font(.archivo(14, weight: 400)).foregroundStyle(theme.inkMuted) }
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.inkMuted)
+            }
         }
+        .contentShape(Rectangle())
     }
 }
 
 extension Theme {
-    /// Tappable text on cream: the paint, unless it's too pale to read there.
-    var actionColor: Color { paint.isLight ? ink : paint.frame }
+    /// Accent on the cream panel: the paint, or ink if it's too pale to read there; on the dark
+    /// palette, the paint's lit shade (made for dark backgrounds).
+    var actionColor: Color { dark ? paint.lit : paint.isLight ? ink : paint.frame }
 }
 
 /// Section header: condensed caps in muted ink, with an optional value on the right.

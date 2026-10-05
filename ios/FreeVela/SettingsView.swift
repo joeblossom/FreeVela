@@ -30,7 +30,7 @@ struct SettingsView: View {
                     display
                     firmware
                     Section {
-                        ShareLink(item: log.exportText) { SettingsRow("Share log with developer", "square.and.arrow.up") }
+                        ShareLink(item: log.exportText) { SettingsRow("Share log with developer", "paperplane.fill") }
                     } header: {
                         SectionHeader("Help")
                     } footer: {
@@ -114,8 +114,8 @@ struct SettingsView: View {
 
     private var keySection: some View {
         Section {
-            if let file = try? VelaBackup.file(for: session.keys.bikes) {
-                ShareLink(item: file) { SettingsRow("Save key backup", "square.and.arrow.down") }
+            Toggle(isOn: Binding(get: { session.keys.syncsWithICloud }, set: { session.keys.setICloudSync($0) })) {
+                SettingsRow("Sync with iCloud Keychain", "icloud.fill", plain: true)
             }
             if link.isUnlocked {
                 Button { confirmingReset = true } label: { SettingsRow("Reset keys…", "key.fill", destructive: true) }
@@ -132,19 +132,12 @@ struct SettingsView: View {
                         Text("Makes new keys for this bike and pairs this phone with them. Old backups and other phones stop working.")
                     }
             }
-            if link.isUnlocked, link.can(.keyReset) {
-                Toggle(isOn: Binding(get: { !session.isOn("fv.lock") }, set: { session.setBikeReset($0) })) {
-                    SettingsRow("Reset from the bike", "hand.raised.fill", plain: true)
-                }
-            }
         } header: {
             SectionHeader("Keys")
         } footer: {
-            if link.isUnlocked, link.can(.keyReset) {
-                footer("Keep a key backup somewhere safe: without it, a lost phone means a locked bike. With Reset from the bike on, holding the brake lever and the button together for 15 seconds erases the keys so any phone can pair. Leave it off unless you need it.")
-            } else {
-                footer("Keep a key backup somewhere safe: without it, a lost phone means a locked bike.")
-            }
+            footer(session.keys.syncsWithICloud
+                   ? "Your keys are end-to-end encrypted in iCloud Keychain, so they come back on a new phone or after reinstalling. Turning this off removes them from iCloud and your other devices; this phone keeps them. Reset keys makes new ones; old backups and other phones stop working."
+                   : "Off: keys stay on this phone only. They usually survive deleting and reinstalling the app, but not a new phone. Reset keys makes new ones; old backups and other phones stop working.")
         }
         .paintRows()
         .alert("Reset keys", isPresented: Binding(get: { resetResult != nil }, set: { if !$0 { resetResult = nil } })) {
