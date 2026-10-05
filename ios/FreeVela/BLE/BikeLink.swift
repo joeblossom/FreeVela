@@ -155,20 +155,26 @@ final class BikeLink: NSObject, ObservableObject {
             }
         }
         let best = bestBike()
+        // Already connected to this phone (a bike stops advertising while connected).
+        if best == nil, let p = central.retrieveConnectedPeripherals(withServices: [BikeProtocol.authService]).first {
+            log.add(.info, "\(p.name ?? "bike") is already connected to this phone")
+            return p
+        }
         if let best {
-            log.add(.info, "found \(best.name ?? "bike") rssi \(best.rssi)")
+            log.add(.info, "found \(best.name ?? "bike") rssi \(best.rssi), id \(best.deviceID ?? "none")"
+                    + (likeliness(best) == 4 ? "" : " (saved id \(bike?.id ?? "none"))"))
         } else if !quiet {
-            log.add(.error, "no bike found nearby")
+            let seen = found.filter { $0.name != nil }.prefix(5).map { "\($0.name!) \($0.deviceID ?? "")" }
+            log.add(.error, "no bike found nearby" + (seen.isEmpty ? "" : "; saw " + seen.joined(separator: ", ")))
         }
         return best?.peripheral
     }
 
-    /// 4: broadcasts this bike's device id. 0: broadcasts a different id (someone else's Vela).
-    /// Otherwise by name and services, for bikes whose id isn't known (yet).
+    /// 4: broadcasts this bike's device id. Otherwise by name and services, so a bike whose
+    /// broadcast id doesn't match the saved one is still found (a wrong bike just won't unlock).
     func likeliness(_ f: Found) -> Int {
-        if let id = bike?.id, !bike!.hasPendingID, let seen = f.deviceID {
-            return seen.caseInsensitiveCompare(id) == .orderedSame ? 4 : 0
-        }
+        if let id = bike?.id, !bike!.hasPendingID, let seen = f.deviceID,
+           seen.caseInsensitiveCompare(id) == .orderedSame { return 4 }
         let name = f.name ?? ""
         if let id = bike?.id, name.localizedCaseInsensitiveContains(id) { return 3 }
         if name.localizedCaseInsensitiveContains("vela") { return 2 }
