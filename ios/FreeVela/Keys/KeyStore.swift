@@ -46,6 +46,21 @@ final class KeyStore: ObservableObject {
         setNeedsBackup(needsBackup.subtracting([bike.id]))
     }
 
+    /// Replaces a temporary id with the bike's real one (keeping its name, photo and backup status).
+    /// If keys for that id are already saved, the temporary entry is dropped.
+    func replaceID(_ old: String, with new: String) {
+        guard old != new, let i = bikes.firstIndex(where: { $0.id == old }) else { return }
+        var list = bikes
+        if list.contains(where: { $0.id == new }) {
+            list.remove(at: i)
+        } else {
+            list[i].id = new
+            BikePhoto.move(old, to: new)
+        }
+        if needsBackup.contains(old) { setNeedsBackup(needsBackup.subtracting([old]).union([new])) }
+        save(list)
+    }
+
     func markNeedsBackup(_ id: String) { setNeedsBackup(needsBackup.union([id])) }
     func markBackedUp(_ ids: [String]) { setNeedsBackup(needsBackup.subtracting(ids)) }
 

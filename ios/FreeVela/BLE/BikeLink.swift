@@ -146,7 +146,8 @@ final class BikeLink: NSObject, ObservableObject {
         var firstSeen: Date?
         while Date().timeIntervalSince(start) < timeout {
             try? await Task.sleep(for: .milliseconds(400))
-            if bestBike() != nil {
+            if let best = bestBike() {
+                if likeliness(best) == 4 { break }   // this bike, by its id
                 firstSeen = firstSeen ?? Date()
                 // Give it a moment to collect RSSI from nearby candidates.
                 if Date().timeIntervalSince(firstSeen!) > 1.5 { break }
@@ -157,7 +158,12 @@ final class BikeLink: NSObject, ObservableObject {
         return best?.peripheral
     }
 
+    /// 4: broadcasts this bike's device id. 0: broadcasts a different id (someone else's Vela).
+    /// Otherwise by name and services, for bikes whose id isn't known (yet).
     func likeliness(_ f: Found) -> Int {
+        if let id = bike?.id, !bike!.hasPendingID, let seen = f.deviceID {
+            return seen.caseInsensitiveCompare(id) == .orderedSame ? 4 : 0
+        }
         let name = f.name ?? ""
         if let id = bike?.id, name.localizedCaseInsensitiveContains(id) { return 3 }
         if name.localizedCaseInsensitiveContains("vela") { return 2 }

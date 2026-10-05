@@ -74,7 +74,15 @@ final class Session: ObservableObject {
     func unlock() async {
         busy = "Unlocking…"
         defer { busy = nil }
-        _ = await link.unlock { busy = $0 }
+        if await link.unlock(progress: { busy = $0 }) { adoptDeviceID() }
+    }
+
+    /// Keys pasted without a device id: once unlocked, take the id the bike broadcasts.
+    private func adoptDeviceID() {
+        guard let bike, bike.hasPendingID, let real = link.connectedDeviceID else { return }
+        link.log.add(.info, "device id \(real) learned from the bike")
+        keys.replaceID(bike.id, with: real)
+        selectedID = real
     }
 
     /// Gives the bike new keys and saves them. Returns false if the bike didn't take them.

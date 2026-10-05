@@ -105,19 +105,23 @@ private struct PasteKeysSheet: View {
     @State private var released = ""
 
     private var bike: BikeKeys {
-        BikeKeys(id: id.trimmingCharacters(in: .whitespaces), key: key, releasedKey: released)
+        let trimmed = id.trimmingCharacters(in: .whitespaces).lowercased()
+        return BikeKeys(id: trimmed.isEmpty ? BikeKeys.pendingID() : trimmed, key: key, releasedKey: released)
     }
     private var valid: Bool {
-        !bike.id.isEmpty && bike.keyBytes?.count == 32 && bike.releasedKeyBytes?.count == 32
+        bike.keyBytes?.count == 32 && bike.releasedKeyBytes?.count == 32
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Device ID (e.g. b2349…)", text: $id)
                     TextField("key (base64)", text: $key)
                     TextField("releasedKey (base64)", text: $released)
+                    TextField("Device ID (optional, e.g. b2349…)", text: $id)
+                } footer: {
+                    Text("Leave the device ID blank if you don't have it: FreeVela reads it from the bike the first time it connects.")
+                        .font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
                 }
                 .paintRows()
                 if !key.isEmpty && bike.keyBytes?.count != 32 { Text("key must be base64 of 32 bytes").foregroundStyle(.red) }
@@ -224,4 +228,8 @@ enum BikePhoto {
     }
 
     static func remove(_ id: String) { try? FileManager.default.removeItem(at: url(id)) }
+
+    static func move(_ old: String, to new: String) {
+        try? FileManager.default.moveItem(at: url(old), to: url(new))
+    }
 }

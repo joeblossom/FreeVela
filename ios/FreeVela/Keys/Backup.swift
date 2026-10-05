@@ -15,6 +15,10 @@ struct BikeKeys: Codable, Identifiable, Hashable {
     var releasedKeyBytes: Data? { Data(base64Encoded: releasedKey.trimmingCharacters(in: .whitespaces)) }
 
     var title: String { displayName ?? id }
+    /// Keys pasted without a device id get a temporary one until the bike's own id is known.
+    static func pendingID() -> String { "pending-" + UUID().uuidString.prefix(8).lowercased() }
+    var hasPendingID: Bool { id.hasPrefix("pending-") }
+
     /// What the screens call the bike.
     var name: String { displayName ?? "My Bike" }
 
