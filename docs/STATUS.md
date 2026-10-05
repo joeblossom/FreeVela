@@ -76,9 +76,10 @@ button and had to be recovered by removing the battery.
 - Wakes on the button (GPIO 0, ext0) or the brake (GPIO 32, ext1) alone; IDF 3.3's ext1 has no
   "any low", so the two use separate wake sources. fvboot releases both pins after either wake.
 - `fv.io` in STATE: live `b3` / `b0` (the button's two pins) and `brk`. Developer tools → State →
-  Inputs shows them. Awake, the button and brake both register (log, 2026-10-05); which button pin
-  carries the press is still to read from `fv.io`. GPIO 3 can't wake the ESP32.
-- To check: Sleep → wake with the button; Sleep → wake with the brake.
+  Inputs shows them. On the bike (2026-10-05): the handlebar button is **GPIO 3**, the brake is
+  **GPIO 32**. GPIO 3 isn't an RTC pin, so the button can't wake the ESP32 from deep sleep; only the
+  brake can. The ext0 wake on GPIO 0 is harmless but unused.
+- To check: Sleep → wake with the brake.
 
 ### FreeVela 0.2.0 — key reset (in progress, 2026-10-03; not built as a release image yet)
 
