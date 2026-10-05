@@ -69,6 +69,17 @@ Still to check on 0.1.0:
 - Front brake + button as a wake combination (only one brake input, GPIO 32, so either both
   levers share it or only the rear lever has a sensor).
 
+### FreeVela 0.2.1-beta1 — wake fix (2026-10-05, test build)
+`out/freevela-0.2.1-beta1.bin`, 779,824 B, sha256 `4ce311f1…1e877` (iCloud Drive → FreeVela
+Firmware; import-only in the app). On 0.2.0-beta1 the bike didn't wake from Sleep with brake +
+button and had to be recovered by removing the battery.
+- Wakes on the button (GPIO 0, ext0) or the brake (GPIO 32, ext1) alone; IDF 3.3's ext1 has no
+  "any low", so the two use separate wake sources. fvboot releases both pins after either wake.
+- `fv.io` in STATE: live `b3` / `b0` (the button's two pins) and `brk`. Developer tools → State →
+  Inputs shows them. Awake, the button and brake both register (log, 2026-10-05); which button pin
+  carries the press is still to read from `fv.io`. GPIO 3 can't wake the ESP32.
+- To check: Sleep → wake with the button; Sleep → wake with the brake.
+
 ### FreeVela 0.2.0 — key reset (in progress, 2026-10-03; not built as a release image yet)
 
 Firmware (QEMU `test_ble.sh` and `test_fvboot.sh` pass): brake + button 15 s key reset, reset lock

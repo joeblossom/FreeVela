@@ -34,6 +34,8 @@ strings boot-fv-diag.log | grep 'info keyless\]' | head -1 | grep -q '"keyed":0'
 strings boot-fv-diag.log | grep 'info owned\]' | head -1 | grep -q '"keyed":1' && echo "PASS  keyed after pairing" || { echo "FAIL  keyed after pairing"; fail=1; }
 strings boot-fv-diag.log | grep 'info holding\]' | grep -qE '"hold":(6|7|8)' && echo "PASS  hold seconds reported" || { echo "FAIL  hold seconds"; fail=1; }
 grep -aqF "tring to register registered bike" boot-fv-diag.log && echo "PASS  second phone refused" || { echo "FAIL  second phone refused"; fail=1; }
+# Live inputs for finding the wake pins.
+strings boot-fv-diag.log | grep 'tune default' | grep -q '"io":{"b3":[01],"b0":[01],"brk":[01]}' && echo "PASS  live inputs in STATE" || { echo "FAIL  live inputs in STATE"; fail=1; }
 # After the reset the bike restarts with no key.
 strings boot-fv-diag.log | sed -n '/fv: key reset/,$p' | grep -q "device has no key" && echo "PASS  restarted without a key after the reset" || { echo "FAIL  no restart without a key"; fail=1; }
 grep -aqE "XS abort|Guru Meditation" boot-fv-diag.log && { echo "FAIL  crash in log"; fail=1; } || echo "PASS  no crash"

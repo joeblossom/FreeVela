@@ -1,7 +1,8 @@
 /* "standby": deep sleep.
-   Wake source confirmed on the bike (2026-10-01): holding the brake lever (GPIO 32) and the
-   handlebar button (GPIO 0) together; neither alone wakes it. Both are RTC GPIOs, active low.
-   fvboot.c releases them from the RTC domain after the wake. */
+   Wakes when the handlebar button (GPIO 0) or the brake lever (GPIO 32) is pressed. Both are RTC
+   GPIOs, active low. Requiring both together (as after a sleep from the original firmware) didn't
+   wake the bike from this firmware's sleep (2026-10-05), so either one now does; Developer tools →
+   State shows the live inputs to confirm the pins. fvboot.c releases them after the wake. */
 #include "xsmc.h"
 #include "xsHost.h"
 #include "esp_sleep.h"
@@ -15,6 +16,8 @@ void xs_standby(xsMachine *the)
 	rtc_gpio_pulldown_dis(GPIO_NUM_0);
 	rtc_gpio_pullup_en(GPIO_NUM_32);
 	rtc_gpio_pulldown_dis(GPIO_NUM_32);
-	esp_sleep_enable_ext1_wakeup((1ULL << GPIO_NUM_0) | (1ULL << GPIO_NUM_32), ESP_EXT1_WAKEUP_ALL_LOW);
+	/* IDF 3.3's ext1 can't wake on "any low", so: ext0 on the button, ext1 on the brake lever alone. */
+	esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);
+	esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_32, ESP_EXT1_WAKEUP_ALL_LOW);
 	esp_deep_sleep_start();
 }

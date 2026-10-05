@@ -9,6 +9,8 @@ const button2 = new Monitor({ pin: 0, mode: Digital.InputPullUp, edge: Monitor.F
 
 // FreeVela: live pin read for the key-reset gesture (modules/fv). Active low.
 export const buttonHeld = () => !button1.read() || !button2.read();
+// FreeVela: each of the button's two inputs (GPIO 3, GPIO 0), 1 = pressed, for finding the wake pin.
+export const buttonPins = () => ({ b3: button1.read() ? 0 : 1, b0: button2.read() ? 0 : 1 });
 
 const initialState = false;
 

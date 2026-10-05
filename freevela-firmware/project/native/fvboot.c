@@ -87,7 +87,8 @@ void freevela_boot_check(void)
 {
 	int revertRequested = (gRevertRequested == REVERT_MAGIC);
 	gRevertRequested = 0;
-	if (ESP_SLEEP_WAKEUP_EXT1 == esp_sleep_get_wakeup_cause()) {
+	esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+	if (ESP_SLEEP_WAKEUP_EXT1 == cause || ESP_SLEEP_WAKEUP_EXT0 == cause) {
 		rtc_gpio_deinit(GPIO_NUM_0);
 		rtc_gpio_deinit(GPIO_NUM_32);
 	}

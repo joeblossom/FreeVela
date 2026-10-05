@@ -48,8 +48,10 @@ How the Vela V2 controller behaves on firmware `2306052112` (June 2023), which F
 | 33 | Pedal sensor | pas |
 | ADC ch 7 (GPIO 35) | Battery voltage | pwr |
 
-**Sleep and wake:** `pwr/SLEEP_REQUESTED` stops the motor and puts the ESP32 into deep sleep. It
-wakes only when the brake lever (GPIO 32) and the handlebar button (GPIO 0) are held together.
+**Sleep and wake:** `pwr/SLEEP_REQUESTED` stops the motor and puts the ESP32 into deep sleep. From
+0.2.1-beta1 it wakes on the handlebar button (GPIO 0, ext0) or the brake lever (GPIO 32, ext1) alone.
+Up to 0.2.0 it needed both held together, and on the bike that didn't wake (2026-10-05; recovered by
+removing the battery). `fv.io` in STATE shows the live inputs (`b3`, `b0`, `brk`: 1 = pressed).
 
 ## Quirks
 

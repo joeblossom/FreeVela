@@ -23,9 +23,17 @@ import Digital from "pins/digital";
 import Preference from "preference";
 import { restart } from "lib/sys";
 import { confirm, trial, trialLeft, trialBoots } from "fvboot";
-import { buttonHeld } from "modules/button";
+import { buttonHeld, buttonPins } from "modules/button";
 import { brakeHeld, tune, TUNE_RANGE, live } from "modules/motor";
 import { adc } from "modules/pwr";
+
+// Live inputs, read when STATE is read (1 = pressed): the button's two pins and the brake lever.
+// Shown in the app's Developer tools → State, to confirm which pins can wake the bike.
+const io = {
+	get b3() { return buttonPins().b3; },
+	get b0() { return buttonPins().b0; },
+	get brk() { return brakeHeld() ? 1 : 0; },
+};
 
 const RESET_MS = 15000;
 const CHIRP_FROM_MS = 5000;
@@ -47,7 +55,7 @@ const ACTIVITY = ["sys/LOADED", "motor/RPS_UPDATED", "motor/BRAKE_STARTED", "but
 const sleepMinutes = (v) => Math.max(0, Math.min(SLEEP_MAX, Math.round(Number(v)) || 0));
 
 const initialState = { ver: config.fvVersion, caps: ["key-reset", "sleep-timer", "motor-tune"],
-	trial: trial(), sleep: sleepMinutes(Preference.get("fv", "sleep")), tune, live, adc };
+	trial: trial(), sleep: sleepMinutes(Preference.get("fv", "sleep")), tune, live, adc, io };
 
 const setTune = (payload) => {
 	for (const key in payload ?? {}) {

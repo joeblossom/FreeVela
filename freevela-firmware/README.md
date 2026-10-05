@@ -19,7 +19,7 @@ Same behavior as Vela `2306052112`, plus:
   the bike switches back to the firmware it was installed from. This catches an image that crashes,
   or boots but whose Bluetooth doesn't work, which otherwise could only be fixed over a wired
   connection. Once confirmed, the image stays. (`project/native/fvboot.c`)
-- **Wakes from Sleep on brake + button held together,** as Vela's does (confirmed on the bike).
+- **Wakes from Sleep on the button or the brake lever** (0.2.1-beta1; holding both together didn't wake on the bike).
   The wake pins are released afterwards so they work as normal inputs. (`project/native/standby.c`)
 - **Keeps the previous firmware.** Vela's firmware erases the spare update slot at every boot. This
   one erases it only when an update starts, so the trial boot has something to switch back to.
