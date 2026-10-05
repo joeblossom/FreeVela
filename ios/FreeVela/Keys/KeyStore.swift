@@ -61,6 +61,14 @@ final class KeyStore: ObservableObject {
         save(list)
     }
 
+    /// Remembers the id a bike broadcasts (see `BikeKeys.radioID`).
+    func setRadioID(_ radioID: String, for id: String) {
+        guard let i = bikes.firstIndex(where: { $0.id == id }), bikes[i].radioID != radioID else { return }
+        var list = bikes
+        list[i].radioID = radioID
+        save(list)
+    }
+
     func markNeedsBackup(_ id: String) { setNeedsBackup(needsBackup.union([id])) }
     func markBackedUp(_ ids: [String]) { setNeedsBackup(needsBackup.subtracting(ids)) }
 

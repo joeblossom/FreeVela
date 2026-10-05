@@ -10,6 +10,9 @@ struct BikeKeys: Codable, Identifiable, Hashable {
     var displayName: String?
     var sku: String?
     var serial: String?
+    /// The id the bike broadcasts over Bluetooth, learned on the first unlock. It can differ from
+    /// `id` (the device id in the Vela account), and finding the bike uses it.
+    var radioID: String?
 
     var keyBytes: Data? { Data(base64Encoded: key.trimmingCharacters(in: .whitespaces)) }
     var releasedKeyBytes: Data? { Data(base64Encoded: releasedKey.trimmingCharacters(in: .whitespaces)) }

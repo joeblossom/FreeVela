@@ -268,7 +268,8 @@ once confirmed (see "Trial boot" above).
 ### Public status and new-owner setup (FreeVela 0.2.0, QEMU-tested, not yet on a bike)
 
 - **Device id:** the scan response carries 7 bytes of service data under the auth service UUID;
-  their lowercase hex is the device id that key backups use (`BikeKeys.id`).
+  in lowercase hex. This can differ from the device id in the Vela account and key backups
+  (`BikeKeys.id`), so the app learns it on the first unlock (`BikeKeys.radioID`) and finds the bike by it.
 - **`fv_info`** (service `00000400-…`, characteristic `00000401-…`, read, **no unlock needed**):
   JSON `{ver, keyed, trial, boots, hold, fuel}` — FreeVela version; 1 if the bike has an owner key;
   seconds left in this boot's trial window (0 once confirmed); unconfirmed boots left; whole seconds

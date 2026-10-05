@@ -127,12 +127,19 @@ final class Session: ObservableObject {
         }
     }
 
-    /// Keys pasted without a device id: once unlocked, take the id the bike broadcasts.
+    /// Once unlocked, remember the id the bike broadcasts, so it's found by that id next time.
+    /// Keys pasted without a device id also take it as their id.
     private func adoptDeviceID() {
-        guard let bike, bike.hasPendingID, let real = link.connectedDeviceID else { return }
-        link.log.add(.info, "device id \(real) learned from the bike")
-        keys.replaceID(bike.id, with: real)
-        selectedID = real
+        guard let bike, let real = link.connectedDeviceID else { return }
+        if bike.hasPendingID {
+            link.log.add(.info, "device id \(real) learned from the bike")
+            keys.replaceID(bike.id, with: real)
+            selectedID = real
+        } else if bike.radioID != real && bike.id.caseInsensitiveCompare(real) != .orderedSame {
+            link.log.add(.info, "Bluetooth id \(real) learned from the bike (device id \(bike.id))")
+            keys.setRadioID(real, for: bike.id)
+            bikesChanged()
+        }
     }
 
     /// Gives the bike new keys and saves them. Returns false if the bike didn't take them.
