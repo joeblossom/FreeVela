@@ -427,6 +427,18 @@ final class BikeLink: NSObject, ObservableObject {
 
     // MARK: State handling
 
+    #if DEBUG
+    /// Simulator screenshots (launch with `-demo`): a sample unlocked bike on FreeVela firmware.
+    func loadDemoState(rps: Double = 4.2, assist: (ast: Int, save: Int) = (1, 20)) {
+        let json = #"{"sys":{"idle":0,"ver":"2306052112"},"alarm":{"armed":false},"pas":{"pedal":true},"#
+            + #""light":{"mode":0},"pwr":{"fuel":78,"save":\#(assist.save),"chr":0},"button":false,"#
+            + #""motor":{"boost":false,"rps":"\#(rps)","pulse":3302820,"brk":false,"ast":\#(assist.ast),"ebc":1},"#
+            + #""fv":{"ver":"0.2.0-beta2","caps":["key-reset","sleep-timer","motor-tune"],"trial":0,"lock":1,"sleep":0,"#
+            + #""tune":{"top":4.276,"btn":0,"mg":18,"sl":29,"cr":0.4},"live":{"out":225,"crv":"drive"}}}"#
+        feedState(Data(json.utf8))
+    }
+    #endif
+
     /// STATE may arrive split across notifications if it's larger than the MTU,
     /// so buffer until it parses.
     private func feedState(_ data: Data) {

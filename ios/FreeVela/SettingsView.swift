@@ -1,55 +1,124 @@
 import SwiftUI
 
-/// Bike, keys, riding, display, firmware and help. Developer tools sit at the bottom.
+/// Bike, paint, keys, riding, display, firmware and help. Developer tools sit at the bottom.
 struct SettingsView: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var link: BikeLink
     @EnvironmentObject private var log: LabLog
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.theme) private var theme
     @AppStorage("units") private var units: Units = .kmh
     @AppStorage("appearance") private var appearance: Appearance = .system
+    @AppStorage("paint") private var paint: Paint = .oxblood
     @State private var confirmingReset = false
     @State private var resetResult: String?
     @State private var topDraft: Double?
+    @State private var showLab = false
 
     var body: some View {
         NavigationStack {
-            Form {
-                if let bike = session.bike { Section { BikeCard(bike: bike) } }
-                BikesSection()
-                if session.bike != nil { keySection }
-                if link.isUnlocked, link.can(.ebrake) || link.can(.ecoThreshold) { riding }
-                if link.isUnlocked, link.can(.motorTune) { motor }
-                if link.isUnlocked, link.can(.sleepTimer) { power }
-                display
-                firmware
-                Section {
-                    ShareLink(item: log.exportText) { SettingsRow("Share log with developer", "square.and.arrow.up", .blue) }
-                } header: {
-                    Text("Help")
-                } footer: {
-                    Text("The log never contains your keys.")
+            VStack(spacing: 0) {
+                band
+                Form {
+                    if let bike = session.bike { Section { BikeCard(bike: bike) }.listRowBackground(Color.clear) }
+                    paintSection
+                    BikesSection()
+                    if session.bike != nil { keySection }
+                    if link.isUnlocked, link.can(.ebrake) || link.can(.ecoThreshold) { riding }
+                    if link.isUnlocked, link.can(.motorTune) { motor }
+                    if link.isUnlocked, link.can(.sleepTimer) { power }
+                    display
+                    firmware
+                    Section {
+                        ShareLink(item: log.exportText) { SettingsRow("Share log with developer", "square.and.arrow.up") }
+                    } header: {
+                        SectionHeader("Help")
+                    } footer: {
+                        footer("The log never contains your keys.")
+                    }
+                    .paintRows()
+                    Section {
+                        NavigationLink { LabView() } label: { SettingsRow("Developer tools", "wrench.and.screwdriver.fill", plain: true) }
+                    } footer: {
+                        footer("Raw Bluetooth, unlock steps and the full log.")
+                    }
+                    .paintRows()
                 }
-                Section {
-                    NavigationLink { LabView() } label: { SettingsRow("Developer tools", "wrench.and.screwdriver.fill", Color(.darkGray), plain: true) }
-                } footer: {
-                    Text("Raw Bluetooth, unlock steps and the full log.")
+                .paintList()
+                .listSectionSpacing(18)
+                .contentMargins(.top, 30, for: .scrollContent)
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 30, topTrailingRadius: 30))
+                .overlay(alignment: .top) {
+                    RimLine(radius: 24)
+                        .stroke(theme.ink, lineWidth: 3)
+                        .frame(height: 26)
+                        .padding(.horizontal, 9)
+                        .padding(.top, 9)
+                        .allowsHitTesting(false)
                 }
+                .padding(.top, -30)
             }
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-            }
+            .background { VStack(spacing: 0) { theme.paint.frame; theme.cream }.ignoresSafeArea() }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(isPresented: $showLab) { LabView() }
+            #if DEBUG
+            .onAppear { if ProcessInfo.processInfo.arguments.contains("-demoLab") { showLab = true } }
+            #endif
         }
     }
+
+    private var band: some View {
+        HStack {
+            Text("Settings").display(40).foregroundStyle(theme.paint.on)
+            Spacer()
+            Button { dismiss() } label: {
+                Text("Done")
+                    .display(16, tracking: 0.04)
+                    .foregroundStyle(theme.paint.frame)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .background(theme.paint.on, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 24)
+        .padding(.bottom, 44)
+        .background(theme.paint.frame)
+    }
+
+    private func footer(_ text: String) -> some View {
+        Text(text).font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
+    }
+
+    // MARK: Paint
+
+    private var paintSection: some View {
+        Section {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5), spacing: 10) {
+                ForEach(Paint.allCases) { p in
+                    Button { paint = p; p.applyIcon() } label: { PaintSwatch(paint: p, selected: p == paint) }
+                        .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            .sensoryFeedback(.selection, trigger: paint)
+        } header: {
+            SectionHeader("Paint", trailing: paint.name)
+        }
+        .paintRows()
+    }
+
+    // MARK: Keys
 
     private var keySection: some View {
         Section {
             if let file = try? VelaBackup.file(for: session.keys.bikes) {
-                ShareLink(item: file) { SettingsRow("Save key backup", "square.and.arrow.down", .blue) }
+                ShareLink(item: file) { SettingsRow("Save key backup", "square.and.arrow.down") }
             }
             if link.isUnlocked {
-                Button { confirmingReset = true } label: { SettingsRow("Reset keys…", "key.fill", .red) }
+                Button { confirmingReset = true } label: { SettingsRow("Reset keys…", "key.fill", destructive: true) }
                     .disabled(session.busy != nil)
                     .confirmationDialog("Reset keys?", isPresented: $confirmingReset, titleVisibility: .visible) {
                         Button("Reset keys", role: .destructive) {
@@ -65,18 +134,19 @@ struct SettingsView: View {
             }
             if link.isUnlocked, link.can(.keyReset) {
                 Toggle(isOn: Binding(get: { !session.isOn("fv.lock") }, set: { session.setBikeReset($0) })) {
-                    SettingsRow("Reset from the bike", "hand.raised.fill", .orange, plain: true)
+                    SettingsRow("Reset from the bike", "hand.raised.fill", plain: true)
                 }
             }
         } header: {
-            Text("Keys")
+            SectionHeader("Keys")
         } footer: {
             if link.isUnlocked, link.can(.keyReset) {
-                Text("Keep a key backup somewhere safe: without it, a lost phone means a locked bike. With Reset from the bike on, holding the brake lever and the button together for 15 seconds erases the keys so any phone can pair. Leave it off unless you need it.")
+                footer("Keep a key backup somewhere safe: without it, a lost phone means a locked bike. With Reset from the bike on, holding the brake lever and the button together for 15 seconds erases the keys so any phone can pair. Leave it off unless you need it.")
             } else {
-                Text("Keep a key backup somewhere safe: without it, a lost phone means a locked bike.")
+                footer("Keep a key backup somewhere safe: without it, a lost phone means a locked bike.")
             }
         }
+        .paintRows()
         .alert("Reset keys", isPresented: Binding(get: { resetResult != nil }, set: { if !$0 { resetResult = nil } })) {
             Button("OK") { resetResult = nil }
         } message: {
@@ -84,34 +154,42 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: Riding, motor, power
+
+    private func valueLabel(_ text: String) -> some View {
+        Text(text).display(20).foregroundStyle(theme.ink)
+    }
+
     private var riding: some View {
         Section {
             if link.can(.ebrake) {
                 Toggle(isOn: Binding(get: { session.isOn("motor.ebc") }, set: { session.setEbrake($0) })) {
-                    SettingsRow("E-brake", "exclamationmark.octagon.fill", .blue, plain: true)
+                    SettingsRow("E-brake", "exclamationmark.octagon.fill", plain: true)
                 }
             }
             if link.can(.ecoThreshold) {
-                VStack(spacing: 6) {
+                VStack(spacing: 10) {
                     LabeledContent {
-                        Text("\(session.eco)% battery").monospacedDigit()
+                        valueLabel("\(session.eco)% battery")
                     } label: {
-                        SettingsRow("Eco below", "leaf.fill", .green, plain: true)
+                        SettingsRow("Eco below", "leaf.fill", plain: true)
                     }
-                    Slider(value: Binding(get: { Double(session.eco) }, set: { session.ecoDraft = Int($0) }),
-                           in: 5...95, step: 5) { editing in
+                    PaintSlider(value: Binding(get: { Double(session.eco) }, set: { session.ecoDraft = Int($0) }),
+                                range: 5...95, step: 5) { editing in
                         if !editing { session.commitEco() }
                     }
                 }
+                .padding(.vertical, 4)
             }
         } header: {
-            Text("Riding")
+            SectionHeader("Riding")
         } footer: {
-            Text(link.can(.ebrake) && link.can(.ecoThreshold)
-                 ? "E-brake: the motor helps brake when you pull the brake lever above about 18 km/h. Eco below: in Auto, assist switches to eco when the battery drops below this level."
-                 : link.can(.ebrake) ? "The motor helps brake when you pull the brake lever above about 18 km/h."
-                 : "In Auto, assist switches to eco when the battery drops below this level.")
+            footer(link.can(.ebrake) && link.can(.ecoThreshold)
+                   ? "E-brake: the motor helps brake when you pull the brake lever above about 18 km/h. Eco below: in Auto, assist switches to eco when the battery drops below this level."
+                   : link.can(.ebrake) ? "The motor helps brake when you pull the brake lever above about 18 km/h."
+                   : "In Auto, assist switches to eco when the battery drops below this level.")
         }
+        .paintRows()
     }
 
     private var motor: some View {
@@ -120,33 +198,32 @@ struct SettingsView: View {
         let high = MotorTune.speed(rps: range.upperBound, units).rounded(.down)
         let top = topDraft ?? MotorTune.speed(rps: session.tune(.top), units).rounded()
         return Section {
-            VStack(spacing: 6) {
+            VStack(spacing: 10) {
                 LabeledContent {
-                    Text("\(Int(top)) \(units.label)").monospacedDigit()
+                    valueLabel("\(Int(top)) \(units.label)")
                 } label: {
-                    SettingsRow("Top speed", "gauge.with.dots.needle.67percent", .red, plain: true)
+                    SettingsRow("Top speed", "gauge.with.dots.needle.67percent", plain: true)
                 }
-                Slider(value: Binding(get: { min(max(top, low), high) }, set: { topDraft = $0 }), in: low...high, step: 1) { editing in
+                PaintSlider(value: Binding(get: { min(max(top, low), high) }, set: { topDraft = $0 }),
+                            range: low...high, step: 1) { editing in
                     guard !editing, let draft = topDraft else { return }
                     session.setTune(.top, min(max(MotorTune.rps(speed: draft, units), range.lowerBound), range.upperBound))
                     topDraft = nil
                 }
             }
+            .padding(.vertical, 4)
             LabeledContent {
-                Picker("Button", selection: Binding(get: { session.tune(.btn) > 0 }, set: { session.setTune(.btn, $0 ? 1 : 0) })) {
-                    Text("Boost").tag(false)
-                    Text("Throttle").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 170)
+                PaintSegmented(selection: Binding(get: { session.tune(.btn) > 0 }, set: { session.setTune(.btn, $0 ? 1 : 0) }),
+                               options: [(false, "Boost"), (true, "Throttle")])
             } label: {
-                SettingsRow("Button", "hand.point.up.left.fill", .orange, plain: true)
+                SettingsRow("Button", "hand.point.up.left.fill", plain: true)
             }
         } header: {
-            Text("Motor")
+            SectionHeader("Motor")
         } footer: {
-            Text("Top speed is how fast assist and the throttle aim for; \(Int(MotorTune.speed(rps: MotorTune.top.default, units).rounded())) \(units.label) is the stock setting. The motor controller may stop helping sooner on its own — record a ride in Developer tools to see. Boost: hold the button while pedalling for full power, or without pedalling for walk assist. Throttle: hold the button to ride up to the top speed without pedalling; there's no walk assist. The brake always cuts the motor.")
+            footer("Top speed is how fast assist and the throttle aim for; \(Int(MotorTune.speed(rps: MotorTune.top.default, units).rounded())) \(units.label) is the stock setting. The motor controller may stop helping sooner on its own — record a ride in Developer tools to see. Boost: hold the button while pedalling for full power, or without pedalling for walk assist. Throttle: hold the button to ride up to the top speed without pedalling; there's no walk assist. The brake always cuts the motor.")
         }
+        .paintRows()
     }
 
     private static let sleepChoices = [0, 5, 10, 15, 30, 60, 120]
@@ -158,13 +235,15 @@ struct SettingsView: View {
             Picker(selection: Binding(get: { current }, set: { session.setSleepAfter($0) })) {
                 ForEach(choices, id: \.self) { Text(Self.sleepLabel($0)) }
             } label: {
-                SettingsRow("Sleep after", "moon.zzz.fill", .indigo, plain: true)
+                SettingsRow("Sleep after", "moon.zzz.fill", plain: true)
             }
+            .tint(theme.ink)
         } header: {
-            Text("Power")
+            SectionHeader("Power")
         } footer: {
-            Text("The bike goes to sleep after this long without riding, pedalling, the button, the brake or a command from the app. It stays awake while the alarm is armed. Wake it by holding the brake lever and the handlebar button together.")
+            footer("The bike goes to sleep after this long without riding, pedalling, the button, the brake or a command from the app. It stays awake while the alarm is armed. Wake it by holding the brake lever and the handlebar button together.")
         }
+        .paintRows()
     }
 
     private static func sleepLabel(_ minutes: Int) -> String {
@@ -175,32 +254,29 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: Display
+
     private var display: some View {
         Section {
             LabeledContent {
-                Picker("Units", selection: $units) {
-                    ForEach(Units.allCases, id: \.self) { Text($0.label) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 140)
+                PaintSegmented(selection: $units, options: Units.allCases.map { ($0, $0.label) })
             } label: {
-                SettingsRow("Units", "speedometer", .orange, plain: true)
+                SettingsRow("Units", "speedometer", plain: true)
             }
             LabeledContent {
-                Picker("Appearance", selection: $appearance) {
-                    ForEach(Appearance.allCases, id: \.self) { Text($0.label) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 186)
+                PaintSegmented(selection: $appearance, options: Appearance.allCases.map { ($0, $0.label) })
             } label: {
-                SettingsRow("Appearance", "circle.lefthalf.filled", .indigo, plain: true)
+                SettingsRow("Appearance", "circle.lefthalf.filled", plain: true)
             }
         } header: {
-            Text("Display")
+            SectionHeader("Display")
         } footer: {
-            Text("Units apply to speed, trip and odometer. Tip: tap the speed on Home to switch quickly.")
+            footer("Units apply to speed, trip and odometer. Tip: tap the speed on Home to switch quickly.")
         }
+        .paintRows()
     }
+
+    // MARK: Firmware
 
     private var latest: FirmwareImage? { FirmwareImage.known.last { $0.freeVela } }
 
@@ -213,60 +289,61 @@ struct SettingsView: View {
     private var firmware: some View {
         Section {
             LabeledContent {
-                Text(link.firmware?.label ?? "—")
+                Text(link.firmware?.label ?? "—").foregroundStyle(theme.inkMuted)
             } label: {
-                SettingsRow("Installed", "cpu", .gray, plain: true)
+                SettingsRow("Installed", "cpu", plain: true)
             }
             NavigationLink { FirmwareUpdateView() } label: {
                 HStack(spacing: 12) {
-                    SettingsIcon("arrow.down.circle.fill", .green)
+                    SettingsIcon("arrow.down.circle.fill")
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("Firmware update")
-                        Text(updateNote).font(.footnote).foregroundStyle(.secondary)
+                        Text("Firmware update").font(.archivo(16, weight: 500))
+                        Text(updateNote).font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
                     }
                 }
             }
         } header: {
-            Text("Firmware")
+            SectionHeader("Firmware")
         } footer: {
             if link.firmware?.kind == .velaUnknown {
-                Text("This firmware version hasn't been tested with FreeVela, so only the basic controls are shown.")
+                footer("This firmware version hasn't been tested with FreeVela, so only the basic controls are shown.")
             } else {
-                Text("Needs at least \(FirmwareUpdater.minBattery)% battery and the bike standing still. If the new firmware can't be unlocked, the bike switches back by itself.")
+                footer("Needs at least \(FirmwareUpdater.minBattery)% battery and the bike standing still. If the new firmware can't be unlocked, the bike switches back by itself.")
             }
         }
+        .paintRows()
     }
 }
 
-/// The colored rounded-square icon used on Settings rows.
-struct SettingsIcon: View {
-    var symbol: String
-    var color: Color
-    init(_ symbol: String, _ color: Color) { self.symbol = symbol; self.color = color }
+/// A paint chip: the color in a circle with the downtube's two pinstripes, and its name.
+struct PaintSwatch: View {
+    @Environment(\.theme) private var theme
+    var paint: Paint
+    var selected: Bool
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(.white)
-            .frame(width: 29, height: 29)
-            .background(color, in: RoundedRectangle(cornerRadius: 7))
-    }
-}
-
-/// Icon + title. Action rows are tinted; `plain` rows (toggles, links, values) use the primary color.
-struct SettingsRow: View {
-    var title: String
-    var symbol: String
-    var color: Color
-    var plain = false
-    init(_ title: String, _ symbol: String, _ color: Color, plain: Bool = false) {
-        self.title = title; self.symbol = symbol; self.color = color; self.plain = plain
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            SettingsIcon(symbol, color)
-            Text(title).foregroundStyle(plain ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
+        let c = paint.colors
+        VStack(spacing: 6) {
+            ZStack {
+                Circle().fill(c.frame)
+                HStack(spacing: 3) {
+                    Rectangle().fill(c.pin).frame(width: 2)
+                    Rectangle().fill(c.pin).frame(width: 2)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, 9 - 3)
+                if selected {
+                    Image(systemName: "checkmark").font(.system(size: 15, weight: .heavy)).foregroundStyle(c.on)
+                }
+            }
+            .clipShape(Circle())
+            .padding(3)
+            .frame(width: 50, height: 50)
+            .overlay(Circle().strokeBorder(selected ? theme.ink : .clear, lineWidth: 3))
+            Text(paint.name).display(11).lineLimit(1).minimumScaleFactor(0.7).foregroundStyle(theme.ink)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(paint.name)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }

@@ -67,7 +67,7 @@ struct RideRecorderView: View {
 
     var body: some View {
         Form {
-            Section {
+            PaintSection {
                 if recorder.recording {
                     Button("Stop recording", role: .destructive) { recorder.stop() }.fontWeight(.semibold)
                 } else {
@@ -83,7 +83,7 @@ struct RideRecorderView: View {
                 Text("Reads the bike about twice a second. Keep FreeVela open on the Ride screen while you ride (it keeps the screen on); recording pauses if the phone locks. Then share the CSV with the developer.")
             }
             if link.isUnlocked {
-                Section("Now") {
+                PaintSection("Now") {
                     LabeledContent("Speed", value: link.speed(units).map { String(format: "%.1f \(units.label)", $0) } ?? "—")
                     LabeledContent("Throttle", value: link.values["fv.live.out"].map { "\($0) of 254" } ?? "—")
                     LabeledContent("Curve", value: link.values["fv.live.crv"] ?? "—")
@@ -92,8 +92,8 @@ struct RideRecorderView: View {
                 }
             }
         }
-        .navigationTitle("Ride recorder")
-        .navigationBarTitleDisplayMode(.inline)
+        .paintList()
+        .paintNavBar("Ride recorder")
     }
 }
 
@@ -106,31 +106,31 @@ struct MotorTuningView: View {
     var body: some View {
         Form {
             if !link.can(.motorTune) {
-                Section { Text("Needs FreeVela firmware 0.2.0 or later.").foregroundStyle(.secondary) }
+                PaintSection { Text("Needs FreeVela firmware 0.2.0 or later.").foregroundStyle(.secondary) }
             } else {
-                Section {
+                PaintSection {
                     row(.mg, "Margin above speed", step: 1, format: "%.0f")
                     row(.sl, "Throttle per wheel turn/s", step: 1, format: "%.0f")
                     row(.cr, "Climb at speed (per 50 ms)", step: 0.02, format: "%.2f")
                 } footer: {
                     Text("The throttle (83 off – 254 full) never drops below 83 + margin + rate × wheel speed while you pedal, climbs toward a ceiling of 83 + margin + rate × top speed, and above about 16 mph climbs by the last number every 50 ms. The stock values are 18, 29 and 0.06.")
                 }
-                Section {
+                PaintSection {
                     Button("Restore FreeVela defaults") {
                         session.setTune(Dictionary(uniqueKeysWithValues: MotorTune.allCases.map { ($0, $0.default) }))
                     }
                 }
             }
         }
-        .navigationTitle("Motor tuning")
-        .navigationBarTitleDisplayMode(.inline)
+        .paintList()
+        .paintNavBar("Motor tuning")
     }
 
     private func row(_ key: MotorTune, _ title: String, step: Double, format: String) -> some View {
         let value = drafts[key] ?? session.tune(key)
         return VStack(alignment: .leading, spacing: 4) {
             LabeledContent(title) { Text(String(format: format, value)).monospacedDigit() }
-            Slider(value: Binding(get: { value }, set: { drafts[key] = $0 }), in: key.range, step: step) { editing in
+            PaintSlider(value: Binding(get: { value }, set: { drafts[key] = $0 }), range: key.range, step: step) { editing in
                 guard !editing, let draft = drafts[key] else { return }
                 session.setTune(key, draft)
                 drafts[key] = nil

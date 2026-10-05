@@ -20,7 +20,8 @@ struct FirmwareUpdateView: View {
             imageSection
             installSection
         }
-        .navigationTitle("Firmware update")
+        .paintList()
+        .paintNavBar("Firmware update")
         .navigationBarBackButtonHidden(updater.running)
         .onAppear(perform: reload)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.data]) { result in
@@ -29,7 +30,7 @@ struct FirmwareUpdateView: View {
     }
 
     private var bikeSection: some View {
-        Section("Bike") {
+        PaintSection("Bike") {
             LabeledContent("Firmware", value: link.firmware?.label ?? (link.isUnlocked ? "—" : "Not connected"))
             LabeledContent("Battery", value: link.values["pwr.fuel"].map { "\($0)%" } ?? "—")
             LabeledContent("Charging", value: link.values["pwr.chr"].map { $0 == "1" || $0 == "true" ? "Yes" : "No" } ?? "—")
@@ -37,7 +38,7 @@ struct FirmwareUpdateView: View {
     }
 
     private var imageSection: some View {
-        Section {
+        PaintSection {
             ForEach(images) { c in
                 Button { selectedID = c.id } label: {
                     HStack {
@@ -81,7 +82,7 @@ struct FirmwareUpdateView: View {
 
     private var installSection: some View {
         let blockers = updater.problems(link)
-        return Section {
+        return PaintSection {
             if !updater.running {
                 ForEach(blockers, id: \.self) { Text($0).foregroundStyle(.red) }
                 Button(selected.map { "Install \($0.image.label)" } ?? "Choose an image") { confirming = true }

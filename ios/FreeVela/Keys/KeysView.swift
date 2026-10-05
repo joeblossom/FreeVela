@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct BikesSection: View {
     @EnvironmentObject private var keys: KeyStore
     @EnvironmentObject private var session: Session
+    @Environment(\.theme) private var theme
     @State private var importing = false
     @State private var pasting = false
     @State private var error: String?
@@ -15,28 +16,31 @@ struct BikesSection: View {
             ForEach(keys.bikes) { bike in
                 Button { session.selectedID = bike.id } label: {
                     HStack(spacing: 12) {
-                        SettingsIcon("bicycle", .green)
+                        SettingsIcon("bicycle")
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(bike.name).foregroundStyle(.primary)
+                            Text(bike.name).font(.archivo(16, weight: 500)).foregroundStyle(theme.ink)
                             Text("\(bike.id.prefix(8)) · \(bike.keyBytes != nil && bike.releasedKeyBytes != nil ? "keys OK" : "keys invalid")")
-                                .font(.footnote.monospaced()).foregroundStyle(.secondary)
+                                .font(.footnote.monospaced()).foregroundStyle(theme.inkMuted)
                         }
                         Spacer()
-                        if bike.id == session.selectedID { Image(systemName: "checkmark").foregroundStyle(.tint).fontWeight(.semibold) }
+                        if bike.id == session.selectedID {
+                            Image(systemName: "checkmark").font(.system(size: 16, weight: .bold)).foregroundStyle(theme.actionColor)
+                        }
                     }
                 }
                 .swipeActions {
                     Button("Remove", role: .destructive) { keys.remove(bike); session.bikesChanged() }
                 }
             }
-            Button { importing = true } label: { SettingsRow("Import backup…", "square.and.arrow.down", .blue) }
-            Button { pasting = true } label: { SettingsRow("Paste keys…", "doc.on.clipboard", .gray) }
+            Button { importing = true } label: { SettingsRow("Import backup…", "square.and.arrow.down") }
+            Button { pasting = true } label: { SettingsRow("Paste keys…", "doc.on.clipboard") }
             if let error { Text(error).font(.footnote).foregroundStyle(.red) }
         } header: {
-            Text("Bikes & keys")
+            SectionHeader("Bikes & keys")
         } footer: {
-            Text("Keys stay on this phone. Swipe a bike to remove it.")
+            Text("Keys stay on this phone. Swipe a bike to remove it.").font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
         }
+        .paintRows()
         .keyImport(importing: $importing, pasting: $pasting, error: $error)
     }
 }
@@ -77,6 +81,7 @@ private struct KeyImport: ViewModifier {
                     session.selectedID = bike.id
                     error = nil
                 }
+                .themed()
             }
     }
 }
@@ -84,6 +89,7 @@ private struct KeyImport: ViewModifier {
 private struct PasteKeysSheet: View {
     var onSave: (BikeKeys) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.theme) private var theme
     @State private var id = ""
     @State private var key = ""
     @State private var released = ""
@@ -98,16 +104,20 @@ private struct PasteKeysSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Device ID (e.g. b2349…)", text: $id)
-                TextField("key (base64)", text: $key)
-                TextField("releasedKey (base64)", text: $released)
+                Section {
+                    TextField("Device ID (e.g. b2349…)", text: $id)
+                    TextField("key (base64)", text: $key)
+                    TextField("releasedKey (base64)", text: $released)
+                }
+                .paintRows()
                 if !key.isEmpty && bike.keyBytes?.count != 32 { Text("key must be base64 of 32 bytes").foregroundStyle(.red) }
                 if !released.isEmpty && bike.releasedKeyBytes?.count != 32 { Text("releasedKey must be base64 of 32 bytes").foregroundStyle(.red) }
             }
+            .paintList()
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .font(.body.monospaced())
-            .navigationTitle("Paste keys")
+            .paintNavBar("Paste keys")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -121,48 +131,66 @@ private struct PasteKeysSheet: View {
 /// Name and photo of the selected bike. Tap the name to rename, the photo to change it.
 struct BikeCard: View {
     @EnvironmentObject private var keys: KeyStore
+    @Environment(\.theme) private var theme
     let bike: BikeKeys
     @State private var name = ""
     @State private var picked: PhotosPickerItem?
     @State private var photo: UIImage?
+    @State private var renaming = false
     @FocusState private var editing: Bool
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
             PhotosPicker(selection: $picked, matching: .images) {
                 Group {
                     if let photo {
                         Image(uiImage: photo).resizable().scaledToFill()
                     } else {
-                        Image(systemName: "bicycle").font(.title2).foregroundStyle(.secondary)
+                        Image(systemName: "bicycle").font(.system(size: 26, weight: .semibold)).foregroundStyle(theme.ink)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(Color(.tertiarySystemFill))
+                            .background(theme.surface)
                     }
                 }
                 .frame(width: 64, height: 64)
                 .clipShape(Circle())
+                .overlay(Circle().strokeBorder(theme.ink, lineWidth: 2))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Bike photo")
             VStack(alignment: .leading, spacing: 2) {
-                TextField("My Bike", text: $name)
-                    .font(.title3.weight(.semibold))
-                    .focused($editing)
-                    .submitLabel(.done)
-                    .onSubmit { keys.rename(bike.id, to: name) }
-                Text("Vela V2 · tap the name to rename").font(.footnote).foregroundStyle(.secondary)
+                if renaming {
+                    TextField("My Bike", text: $name)
+                        .font(.display(26))
+                        .foregroundStyle(theme.ink)
+                        .focused($editing)
+                        .submitLabel(.done)
+                        .onSubmit { finishRename() }
+                        .onAppear { editing = true }
+                } else {
+                    Button { renaming = true } label: {
+                        Text(bike.name).display(26).foregroundStyle(theme.ink).lineLimit(1).minimumScaleFactor(0.6)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Renames the bike")
+                }
+                Text("Vela V2 · tap the name to rename").font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
             }
         }
         .padding(.vertical, 4)
         .onAppear { name = bike.displayName ?? ""; photo = BikePhoto.load(bike.id) }
         .onChange(of: bike.id) { name = bike.displayName ?? ""; photo = BikePhoto.load(bike.id) }
-        .onChange(of: editing) { if !editing { keys.rename(bike.id, to: name) } }
+        .onChange(of: editing) { if !editing { finishRename() } }
         .onChange(of: picked) {
             Task {
                 guard let data = try? await picked?.loadTransferable(type: Data.self), let image = UIImage(data: data) else { return }
                 photo = BikePhoto.save(image, for: bike.id)
             }
         }
+    }
+
+    private func finishRename() {
+        keys.rename(bike.id, to: name)
+        renaming = false
     }
 }
 

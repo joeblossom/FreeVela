@@ -27,8 +27,11 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIRequiredDeviceCapabilities: [bluetooth-le]
         ITSAppUsesNonExemptEncryption: false
+        UIAppFonts: [Archivo-Variable.ttf]
+        UIViewControllerBasedStatusBarAppearance: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.joeblossom.FreeVela
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Olive AppIcon-SignalRed AppIcon-Coral AppIcon-Sunflower AppIcon-Midnight AppIcon-Sage AppIcon-Sky AppIcon-Petal AppIcon-Graphite"

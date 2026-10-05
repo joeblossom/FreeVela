@@ -53,8 +53,23 @@ private struct RootView: View {
                 OnboardingView { onboarded = true }
             }
         }
+        .themed()
         .preferredColorScheme(appearance.scheme)
-        .onAppear { session.autoConnect() }
+        .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-demo") {
+                if keys.bikes.isEmpty {
+                    let zero = Data(count: 32).base64EncodedString()
+                    keys.add([BikeKeys(id: "demo0000", key: zero, releasedKey: Data(repeating: 1, count: 32).base64EncodedString())])
+                }
+                let args = ProcessInfo.processInfo.arguments
+                let off = args.contains("-demoOff")
+                link.loadDemoState(rps: off ? 0 : 4.2, assist: off ? (0, 20) : (1, 20))
+                return
+            }
+            #endif
+            session.autoConnect()
+        }
         .onChange(of: keys.bikes) {
             session.bikesChanged()
             if keys.bikes.isEmpty { onboarded = false }

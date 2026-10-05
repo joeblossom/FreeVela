@@ -10,7 +10,7 @@ struct LabView: View {
 
     var body: some View {
         Form {
-            Section {
+            PaintSection {
                 NavigationLink { LabPage("Scan & devices") { ScanSection() } } label: {
                     SettingsRow("Scan & devices", "dot.radiowaves.left.and.right", .blue, plain: true)
                 }
@@ -30,7 +30,7 @@ struct LabView: View {
             } footer: {
                 Text("Change assist from Dispatch only with the bike on a stand.")
             }
-            Section("Motor") {
+            PaintSection("Motor") {
                 NavigationLink { RideRecorderView() } label: {
                     LabeledContent { Text(recorder.recording ? "Recording" : "") } label: {
                         SettingsRow("Ride recorder", "record.circle", .red, plain: true)
@@ -40,7 +40,7 @@ struct LabView: View {
                     SettingsRow("Motor tuning", "slider.horizontal.3", .red, plain: true)
                 }
             }
-            Section("Unlock") {
+            PaintSection("Unlock") {
                 NavigationLink { LabPage("Auth steps", needsConnection: true) { AuthSection() } } label: {
                     SettingsRow("Auth steps", "key.fill", .gray, plain: true)
                 }
@@ -48,7 +48,7 @@ struct LabView: View {
                     SettingsRow("Unlock methods", "lock.open.fill", .gray, plain: true)
                 }
             }
-            Section("Log") {
+            PaintSection("Log") {
                 ForEach(log.entries.suffix(4).reversed()) { e in
                     Text(log.line(e)).font(.caption2.monospaced()).foregroundStyle(color(e.kind))
                 }
@@ -57,8 +57,8 @@ struct LabView: View {
                 }
             }
         }
-        .navigationTitle("Developer tools")
-        .navigationBarTitleDisplayMode(.inline)
+        .paintList()
+        .paintNavBar("Developer tools")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: log.exportText) { Label("Share log", systemImage: "square.and.arrow.up") }
@@ -83,15 +83,15 @@ private struct LabPage<Content: View>: View {
     var body: some View {
         Form {
             if needsConnection && link.phase != .connected && link.phase != .connecting {
-                Section {
+                PaintSection {
                     Text("Not connected. Connect from Scan & devices, or let Home find your bike.").foregroundStyle(.secondary)
                 }
             } else {
                 content
             }
         }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        .paintList()
+        .paintNavBar(title)
     }
 }
 
@@ -110,7 +110,7 @@ private struct ScanSection: View {
     private func rank(_ f: BikeLink.Found) -> Int { link.likeliness(f) }
 
     var body: some View {
-        Section {
+        PaintSection {
             HStack {
                 if link.phase == .scanning {
                     Button("Stop scan") { link.stopScan() }
@@ -151,7 +151,7 @@ private struct ConnectionSection: View {
     @EnvironmentObject private var link: BikeLink
 
     var body: some View {
-        Section("Connection — \(link.phase.rawValue)") {
+        PaintSection("Connection — \(link.phase.rawValue)") {
             if let name = link.connectedName { LabeledContent("Peripheral", value: name) }
             ForEach(link.services, id: \.uuid) { s in
                 DisclosureGroup(link.label(s.uuid)) {
@@ -185,7 +185,7 @@ private struct AuthSection: View {
     private var bike: BikeKeys? { session.bike }
 
     var body: some View {
-        Section {
+        PaintSection {
             Button("1. Read CHALLENGE") { Task { await link.attempt("read CHALLENGE") { try await link.read(BikeProtocol.challenge) } } }
             Button("2. Read RELEASE") { Task { await link.attempt("read RELEASE") { try await link.read(BikeProtocol.release) } } }
             Button("3. Write RELEASE ← releasedKey") { Task { await link.writeReleasedKey() } }.disabled(bike == nil)
@@ -208,7 +208,7 @@ private struct UnlockSection: View {
     @EnvironmentObject private var link: BikeLink
 
     var body: some View {
-        Section {
+        PaintSection {
             Button("Unlock handshake") { Task { _ = await link.unlockHandshake() } }.fontWeight(.semibold)
             Button("Unlock handshake, without writing RELEASE") { Task { _ = await link.unlockHandshake(writeRelease: false) } }
             ForEach(UnlockMethod.all) { m in
@@ -230,7 +230,7 @@ private struct StateSection: View {
 
     var body: some View {
         if link.values["fv.adc.c0"] != nil {
-            Section {
+            PaintSection {
                 ForEach(["c0": "GPIO 36", "c3": "GPIO 39", "c6": "GPIO 34", "c7": "GPIO 35 (battery)"].sorted { $0.key < $1.key }, id: \.key) { key, pin in
                     LabeledContent(pin, value: link.values["fv.adc.\(key)"] ?? "—").monospacedDigit()
                 }
@@ -241,7 +241,7 @@ private struct StateSection: View {
                 Text("Raw readings (0–1023) of the board's spare analog inputs, updated with each read. Note them with the charger unplugged, then plugged in: an input that changes a lot is a charger signal. Share the log or a screenshot with the developer.")
             }
         }
-        Section("State") {
+        PaintSection("State") {
             HStack {
                 Button("Read STATE") { Task { await link.attempt("read STATE") { try await link.read(BikeProtocol.state) } } }
                     .buttonStyle(.borderless)
@@ -269,7 +269,7 @@ private struct DispatchSection: View {
     @State private var base64Text = false
 
     var body: some View {
-        Section {
+        PaintSection {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     ForEach(BikeProtocol.presets) { p in
@@ -307,9 +307,11 @@ struct LogView: View {
     var body: some View {
         List(log.entries) { e in
             Text(log.line(e)).font(.caption2.monospaced()).foregroundStyle(color(e.kind)).textSelection(.enabled)
+                .listRowBackground(Color.clear)
         }
         .listStyle(.plain)
-        .navigationTitle("Log")
+        .paintList()
+        .paintNavBar("Log")
         .toolbar {
             ShareLink(item: log.exportText)
             Button("Clear", role: .destructive) { log.clear() }

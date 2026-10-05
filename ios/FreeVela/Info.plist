@@ -24,6 +24,10 @@
 	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>FreeVela connects to your bike over Bluetooth to read its state and send commands.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Archivo-Variable.ttf</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
@@ -38,5 +42,7 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
 </dict>
 </plist>

@@ -1,211 +1,240 @@
 import SwiftUI
 
-/// Speed first: a huge number, one big assist slider and round quick actions.
-/// Keys, units and developer tools live in Settings.
+/// Speed first, painted in the bike's frame color: a huge number over a cream "tyre" panel with
+/// assist, quick actions and Start ride. Keys, units and developer tools live in Settings.
 struct HomeView: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var link: BikeLink
+    @Environment(\.theme) private var theme
     @AppStorage("units") private var units: Units = .kmh
     @State private var showSettings = false
     @State private var riding = false
     @State private var confirmSiren = false
+    /// Heights of the parts above and below the flexible gap, so the speed sits on the panel.
+    @State private var topHeight: CGFloat = 0
+    @State private var bottomHeight: CGFloat = 0
+    @State private var speedHeight: CGFloat = 0
+    @State private var panelHeight: CGFloat = 0
 
     private var ok: Bool { link.isUnlocked }
 
     var body: some View {
         GeometryReader { geo in
+            let gap = max(16, geo.size.height - topHeight - bottomHeight)
             ScrollView {
                 VStack(spacing: 0) {
-                    header
-                    StatusBanner()
-                    VStack(spacing: 0) {
-                        speed.frame(maxHeight: .infinity)
-                        if !ok || link.can(.assistModes) { assist }
-                        quickActions
-                        startRide
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            header
+                            StatusBanner()
+                        }
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
+                        Color.clear.frame(height: gap)
+                        speedRow(size: min(250, geo.size.height * 0.34))
+                            .opacity(ok ? 1 : 0.35)
+                            .animation(.easeInOut(duration: 0.3), value: ok)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { speedHeight = $0 }
                     }
-                    .opacity(ok ? 1 : 0.35)
-                    .disabled(!ok)
-                    .animation(.easeInOut(duration: 0.3), value: ok)
+                    .foregroundStyle(theme.paint.on)
+                    .background(theme.paint.frame)
+                    panel
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelHeight = $0 }
                 }
-                .padding(.bottom, 16)
-                .frame(minHeight: geo.size.height)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .onChange(of: speedHeight + panelHeight) { bottomHeight = speedHeight + panelHeight - 36 }
         }
-        .background(Color(.systemBackground))
-        .sheet(isPresented: $showSettings) { SettingsView() }
-        .fullScreenCover(isPresented: $riding) { RideView() }
+        .background {
+            VStack(spacing: 0) { theme.paint.frame; theme.cream }.ignoresSafeArea()
+        }
+        .paintStatusBar()
+        #if DEBUG
+        .onAppear {
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains("-demoSettings") { showSettings = true }
+            if args.contains("-demoRide") { riding = true }
+        }
+        #endif
+        .sheet(isPresented: $showSettings) { SettingsView().themed() }
+        .fullScreenCover(isPresented: $riding) { RideView().themed() }
         .confirmationDialog("Sound the bike's siren for 15 seconds? It's loud. Stay connected until it stops.",
                             isPresented: $confirmSiren, titleVisibility: .visible) {
             Button("Sound alarm", role: .destructive) { session.soundSiren() }
         }
     }
 
+    // MARK: Painted area
+
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(session.bike?.name ?? "FreeVela").font(.title2.bold())
-                StatusLabel()
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(session.bike?.name ?? "FreeVela").display(34, tracking: 0.01).lineLimit(1).minimumScaleFactor(0.6)
+                StatusChip()
             }
             Spacer()
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 20))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(theme.paint.on)
                     .frame(width: 44, height: 44)
-                    .background(Color(.secondarySystemBackground), in: Circle())
+                    .background(theme.paint.deep, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
         }
         .padding(.horizontal, 20)
-        .padding(.top, 6)
+        .padding(.top, 10)
     }
 
-    private var speed: some View {
+    private var speedText: String {
+        ok ? link.speed(units).map { "\(Int($0.rounded()))" } ?? "—" : "—"
+    }
+
+    private func speedRow(size: CGFloat) -> some View {
         Button { units = units.toggled } label: {
-            VStack(spacing: 0) {
-                Text(ok ? link.speed(units).map { "\(Int($0.rounded()))" } ?? "—" : "—")
-                    .font(.system(size: 148, weight: .bold).monospacedDigit())
-                    .tracking(-6)
-                    .minimumScaleFactor(0.5)
+            HStack(alignment: .bottom, spacing: 12) {
+                Text(speedText)
+                    .font(.display(size, weight: 900))
+                    .tracking(-size * 0.02)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.4)
                     .contentTransition(.numericText())
-                Text(units.label).font(.title3.weight(.semibold)).foregroundStyle(.secondary)
-                HStack(spacing: 16) {
-                    Label(link.battery.map { "\($0)%" } ?? "—%", systemImage: link.batterySymbol)
-                        .labelStyle(TintedIconLabel(tint: .green))
-                    Label(link.odometerPulses.map { distance(pulses: $0, units) } ?? "—",
-                          systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                        .labelStyle(TintedIconLabel(tint: .secondary))
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.top, 16)
+                    .padding(.vertical, -size * 0.104)
+                    .padding(.bottom, -4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                specBlock.frame(width: 118)
             }
-            .frame(maxWidth: .infinity, minHeight: 240)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!ok)
+        .accessibilityLabel("Speed \(speedText) \(units.label)")
         .accessibilityHint("Switches between km/h and mph")
     }
 
-    private var assist: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Assist").fontWeight(.semibold)
+    private var specBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(units.label).display(30)
+            rule
+            HStack(alignment: .firstTextBaseline) {
+                Text("Batt").display(13, weight: 700, tracking: 0.1)
                 Spacer()
-                Text(session.assist == .auto ? "Auto · eco below \(session.eco)%" : session.assist?.rawValue ?? "")
+                Text(link.battery.map { "\($0)%" } ?? "—").display(22)
+                if link.flag("pwr.chr") == true { Image(systemName: "bolt.fill").font(.system(size: 13, weight: .bold)) }
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 4)
-            .padding(.bottom, 10)
-            AssistSlider(mode: session.assist) { session.setAssist($0) }
+            rule
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Odo").display(13, weight: 700, tracking: 0.1)
+                Text(link.odometerPulses.map { distance(pulses: $0, units) } ?? "—")
+                    .font(.display(20)).lineLimit(1).minimumScaleFactor(0.7)
+            }
         }
+    }
+
+    private var rule: some View { Rectangle().fill(theme.paint.on).frame(height: 2) }
+
+    // MARK: Tyre panel
+
+    private var panel: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 18) {
+                if !ok || link.can(.assistModes) { assist }
+                quickActions
+            }
+            .opacity(ok ? 1 : 0.35)
+            .disabled(!ok)
+            .animation(.easeInOut(duration: 0.3), value: ok)
+            InkBarButton(title: "Start ride", symbol: "arrow.right") { riding = true }
+                .opacity(ok ? 1 : 0.35)
+                .disabled(!ok)
+        }
+        .padding(.top, 28)
         .padding(.horizontal, 20)
+        .padding(.bottom, 16)
+        .background(TyreBackground())
+        .padding(.top, -36)
+    }
+
+    private var assistTitle: String {
+        guard let mode = session.assist else { return "Assist" }
+        return mode == .auto ? "Assist — Auto · eco below \(session.eco)%" : "Assist — \(mode.rawValue)"
+    }
+
+    private var assist: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(assistTitle)
+            AssistTiles(mode: session.assist) { session.setAssist($0) }
+        }
     }
 
     private var quickActions: some View {
-        HStack(alignment: .top, spacing: 0) {
+        HStack(spacing: 6) {
             if !ok || link.can(.light) {
                 let light = session.light ?? .auto
-                QuickAction(symbol: light.symbol, label: "Light \(light.label)",
-                            fill: light.isOn ? .orange : nil, tint: light.isOn ? .white : .gray) {
+                QuickAction(symbol: light.symbol, label: "Light \(light.label)", on: light.isOn) {
                     session.setLight(light.next)
                 }
             }
             if !ok || link.can(.alarm) {
                 let armed = session.isOn("alarm.armed")
                 QuickAction(symbol: armed ? "checkmark.shield.fill" : "shield.slash",
-                            label: armed ? "Armed" : "Alarm off",
-                            fill: armed ? .green : nil, tint: armed ? .white : .gray) {
+                            label: armed ? "Armed" : "Alarm off", on: armed) {
                     session.setAlarm(!armed)
                 }
             }
             if !ok || link.can(.findMyBike) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let left = session.sirenEnds.map { max(0, Int($0.timeIntervalSince(context.date).rounded(.up))) }
-                    QuickAction(symbol: "speaker.wave.3.fill", label: left.map { "\($0)s" } ?? "Find bike",
-                                fill: left == nil ? nil : .red, tint: left == nil ? .red : .white) {
+                    QuickAction(symbol: "speaker.wave.3.fill", label: left.map { "\($0)s…" } ?? "Find bike", on: left != nil) {
                         if session.sirenEnds == nil { confirmSiren = true }
                     }
                 }
             }
             if !ok || link.can(.sleep) {
-                QuickAction(symbol: "moon.fill", label: "Sleep", fill: nil, tint: .indigo) { session.sleep() }
+                QuickAction(symbol: "moon.fill", label: "Sleep", on: false) { session.sleep() }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 22)
-    }
-
-    private var startRide: some View {
-        Button { riding = true } label: {
-            Label("Start ride", systemImage: "play.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 54)
-                .foregroundStyle(Color(.systemBackground))
-                .background(Color.primary, in: Capsule())
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 22)
     }
 }
 
-// MARK: - Status
-
-/// "● Connected" under the bike's name.
-struct StatusLabel: View {
-    @EnvironmentObject private var session: Session
-    @EnvironmentObject private var link: BikeLink
-
-    var body: some View {
-        let (text, color): (String, Color) = switch session.status {
-        case .connected: ("Connected", .green)
-        case .locked: ("Locked", .orange)
-        case .searching: ("Searching…", .orange)
-        case .bluetooth: ("Bluetooth off", .gray)
-        case .asleep: ("Asleep", .gray)
-        }
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text(text)
-        }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-    }
-}
+// MARK: - Status banner
 
 /// Explains why the controls are dimmed, with the one action that helps.
 struct StatusBanner: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var link: BikeLink
+    @Environment(\.theme) private var theme
 
     var body: some View {
         if let content {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 if content.spinning {
-                    ProgressView().frame(width: 22)
+                    ProgressView().tint(theme.ink).frame(width: 22)
                 } else {
-                    Image(systemName: content.symbol).font(.title3).foregroundStyle(.orange).frame(width: 22)
+                    Image(systemName: content.symbol).font(.system(size: 20, weight: .semibold)).frame(width: 22)
                 }
-                (Text(content.title).bold() + Text(" " + content.text))
-                    .font(.footnote)
+                (Text(content.title).font(.archivo(14, weight: 700)) + Text(" " + content.text).font(.archivo(14, weight: 400)))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let button = content.button {
-                    Button(button.0, action: button.1)
-                        .font(.subheadline.weight(.semibold))
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.capsule)
+                    Button(action: button.1) {
+                        Text(button.0)
+                            .display(15, tracking: 0.04)
+                            .foregroundStyle(theme.paint.on)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(theme.paint.frame, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
+            .foregroundStyle(theme.ink)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+            .background(theme.surface, in: RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal, 20)
-            .padding(.top, 14)
+            .padding(.top, 16)
         }
     }
 
@@ -237,103 +266,65 @@ struct StatusBanner: View {
 
 // MARK: - Controls
 
-/// One fat 4-stop slider: drag or tap anywhere on it. Sends the mode when you let go.
-struct AssistSlider: View {
+/// Four assist tiles; a tap sends the mode at once.
+struct AssistTiles: View {
+    @Environment(\.theme) private var theme
     var mode: BikeProtocol.AssistMode?
     var onChange: (BikeProtocol.AssistMode) -> Void
-    @State private var dragging: Int?
 
     private let modes = BikeProtocol.AssistMode.allCases
-    private let height: CGFloat = 64
 
     var body: some View {
-        let shown = dragging ?? mode?.index ?? 0
-        let frac = CGFloat(shown) / CGFloat(modes.count - 1)
-        GeometryReader { geo in
-            let pad = height / 2, track = geo.size.width - height
-            let x = pad + track * frac
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color(.secondarySystemBackground))
-                Capsule()
-                    .fill(shown == 0 ? Color(.systemGray).opacity(0.35) : .accentColor)
-                    .frame(width: x + pad)
-                ForEach(Array(modes.enumerated()), id: \.offset) { i, m in
-                    Text(m.rawValue)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(i < shown ? AnyShapeStyle(.white.opacity(0.9)) : i == shown ? AnyShapeStyle(.clear) : AnyShapeStyle(.secondary))
-                        .frame(width: 60)
-                        .position(x: pad + track * CGFloat(i) / CGFloat(modes.count - 1), y: height / 2)
-                }
-                Circle()
-                    .fill(.white)
-                    .shadow(color: .black.opacity(0.18), radius: 5, y: 3)
-                    .frame(width: height - 8, height: height - 8)
-                    .overlay {
-                        Image(systemName: modes[shown].symbol)
-                            .font(.system(size: 22))
-                            .foregroundStyle(shown == 0 ? Color(.systemGray) : .accentColor)
+        HStack(spacing: 6) {
+            ForEach(modes) { m in
+                let on = m == mode
+                let fill = on ? (m == .off ? theme.ink : theme.paint.frame) : theme.tile
+                let text = on ? (m == .off ? theme.onInk : theme.paint.on) : theme.ink
+                Button { onChange(m) } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: m.symbol).font(.system(size: 22, weight: .semibold))
+                        Text(m.rawValue).display(16, tracking: 0.04)
                     }
-                    .position(x: x, y: height / 2)
+                    .foregroundStyle(text)
+                    .frame(maxWidth: .infinity, minHeight: 72)
+                    .background(fill, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
-            .animation(.snappy(duration: 0.18), value: shown)
-            .contentShape(Capsule())
-            .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { dragging = index(at: $0.location.x, pad: pad, track: track) }
-                .onEnded {
-                    let i = index(at: $0.location.x, pad: pad, track: track)
-                    dragging = nil
-                    onChange(modes[i])
-                })
         }
-        .frame(height: height)
-        .sensoryFeedback(.selection, trigger: shown)
-        .accessibilityElement()
+        .animation(.easeInOut(duration: 0.18), value: mode)
+        .sensoryFeedback(.selection, trigger: mode)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Assist")
-        .accessibilityValue(modes[shown].rawValue)
+        .accessibilityValue(mode?.rawValue ?? "")
         .accessibilityAdjustableAction { direction in
-            let i = direction == .increment ? min(shown + 1, modes.count - 1) : max(shown - 1, 0)
-            onChange(modes[i])
+            let i = mode?.index ?? 0
+            onChange(modes[direction == .increment ? min(i + 1, modes.count - 1) : max(i - 1, 0)])
         }
-    }
-
-    private func index(at x: CGFloat, pad: CGFloat, track: CGFloat) -> Int {
-        let f = min(max((x - pad) / track, 0), 1)
-        return Int((f * CGFloat(modes.count - 1)).rounded())
     }
 }
 
-/// A round 56 pt button with a caption. `fill == nil` means the quiet gray background.
+/// A quick action: ink outline when off, ink fill with cream when on.
 struct QuickAction: View {
+    @Environment(\.theme) private var theme
     var symbol: String
     var label: String
-    var fill: Color?
-    var tint: Color
+    var on: Bool
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.system(size: 22))
-                    .foregroundStyle(tint)
-                    .frame(width: 56, height: 56)
-                    .background(fill ?? Color(.secondarySystemBackground), in: Circle())
-                Text(label).font(.caption).foregroundStyle(.primary).lineLimit(1)
+                Image(systemName: symbol).font(.system(size: 20, weight: .semibold))
+                Text(label).display(12, tracking: 0.06).lineLimit(1).minimumScaleFactor(0.7)
             }
-            .frame(maxWidth: .infinity)
+            .foregroundStyle(on ? theme.onInk : theme.ink)
+            .frame(maxWidth: .infinity, minHeight: 64)
+            .background(on ? theme.ink : .clear, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.ink, lineWidth: 2))
         }
         .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.2), value: fill)
-    }
-}
-
-/// A label whose icon has its own color.
-struct TintedIconLabel<S: ShapeStyle>: LabelStyle {
-    var tint: S
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 5) {
-            configuration.icon.foregroundStyle(tint)
-            configuration.title
-        }
+        .animation(.easeInOut(duration: 0.18), value: on)
     }
 }
