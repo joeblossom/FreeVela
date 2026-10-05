@@ -63,7 +63,11 @@ struct SettingsView: View {
                 .padding(.top, -30)
             }
             .background { VStack(spacing: 0) { theme.paint.frame; theme.cream }.ignoresSafeArea() }
-            .toolbar(.hidden, for: .navigationBar)
+            // Keep the bar (painted like the band, so it doesn't show) rather than hiding it: a bar that
+            // appears on pushed pages made them lay out too high, then jump down.
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(theme.paint.frame, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .navigationDestination(isPresented: $showLab) { LabView() }
             .navigationDestination(isPresented: $showBike) { BikeDetailView(bikeID: session.selectedID ?? "") }
             .navigationDestination(isPresented: $showAdd) {
@@ -81,7 +85,7 @@ struct SettingsView: View {
                 let args = ProcessInfo.processInfo.arguments
                 if args.contains("-demoLab") { showLab = true }
                 if args.contains("-demoBike") { showBike = true }
-                if args.contains("-demoAdd") { showAdd = true }
+                if args.contains("-demoAdd") { Task { try? await Task.sleep(for: .seconds(1.5)); showAdd = true } }
                 if args.contains("-demoPaste") { Task { try? await Task.sleep(for: .seconds(1)); pasting = true } }
                 if args.contains("-demoSetupCover") {
                     Task { try? await Task.sleep(for: .seconds(1)); settingUp = true }
@@ -106,7 +110,7 @@ struct SettingsView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 24)
+        .padding(.top, 0)
         .padding(.bottom, 44)
         .background(theme.paint.frame)
     }
