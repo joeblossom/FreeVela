@@ -21,6 +21,14 @@ final class Session: ObservableObject {
     @Published var sirenEnds: Date?
     private var watch: AnyCancellable?
     private var lightFix: AnyCancellable?
+    private var readyWatch: AnyCancellable?
+    private var lookout: Task<Void, Never>?
+    /// The app is in the foreground (set by RootView), so it's worth looking for the bike.
+    var foreground = false
+    /// Scanning in the background while the "asleep" screen shows; Home keeps showing asleep.
+    private var quietScan = false
+    /// After a failed unlock, don't retry on our own for a minute (it would just fail again).
+    private var unlockFailedAt: Date?
 
     let keys: KeyStore
     let link: BikeLink
@@ -33,6 +41,11 @@ final class Session: ObservableObject {
         let saved = UserDefaults.standard.string(forKey: "selectedBikeID")
         selectedID = keys.bikes.contains { $0.id == saved } ? saved : keys.bikes.first?.id
         link.bike = bike
+        #if DEBUG
+        if Self.demoTransition {
+            Task { [weak self] in try? await Task.sleep(for: .seconds(3.1)); self?.objectWillChange.send() }
+        }
+        #endif
         // Each STATE read: forget picks the bike has caught up with, or that it never confirmed in time.
         watch = link.$values.dropFirst().sink { [weak self] values in
             guard let self, !self.pending.isEmpty else { return }
@@ -45,6 +58,38 @@ final class Session: ObservableObject {
             self.link.log.add(.info, "light was always on; switching it to auto so it turns off when the bike idles")
             self.setLight(.auto)
         }
+        // Connected but not unlocked, by any route (a slow connect, a reconnect): unlock on our own.
+        readyWatch = link.$ready.removeDuplicates().sink { [weak self] ready in
+            guard ready else { return }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(300))
+                guard let self, self.connected, !self.link.isUnlocked, self.mayActOnItsOwn else { return }
+                await self.unlock()
+            }
+        }
+        // While the bike seems asleep (or out of range) and the app is open, keep looking quietly.
+        lookout = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(4))
+                guard let self else { return }
+                guard self.foreground, self.status == .asleep, self.mayActOnItsOwn,
+                      self.link.phase != .connecting, self.link.phase != .scanning else { continue }
+                self.quietScan = true
+                let found = await self.link.findBike(timeout: 8, quiet: true)
+                self.quietScan = false
+                guard let found, self.mayActOnItsOwn, !self.connected else { continue }
+                self.busy = "Connecting…"
+                let up = await self.link.connectAndWait(found, timeout: 15)
+                self.busy = nil
+                if up, !self.link.isUnlocked { await self.unlock() }
+            }
+        }
+    }
+
+    /// Nothing else is driving the connection, and an unlock hasn't just failed.
+    private var mayActOnItsOwn: Bool {
+        bike != nil && busy == nil && !setupRunning && !updater.running && link.bluetooth == .poweredOn
+            && (unlockFailedAt.map { Date().timeIntervalSince($0) > 60 } ?? true)
     }
 
     var bike: BikeKeys? { keys.bikes.first { $0.id == selectedID } }
@@ -74,7 +119,12 @@ final class Session: ObservableObject {
     func unlock() async {
         busy = "Unlocking…"
         defer { busy = nil }
-        if await link.unlock(progress: { busy = $0 }) { adoptDeviceID() }
+        if await link.unlock(progress: { busy = $0 }) {
+            unlockFailedAt = nil
+            adoptDeviceID()
+        } else {
+            unlockFailedAt = Date()
+        }
     }
 
     /// Keys pasted without a device id: once unlocked, take the id the bike broadcasts.
@@ -105,6 +155,7 @@ final class Session: ObservableObject {
     var status: Status {
         #if DEBUG
         if let demo = Self.demoStatus { return demo }
+        if Self.demoTransition { return Date() < Self.demoStart + 3 ? .searching : .connected }
         #endif
         if link.bluetooth != .poweredOn { return .bluetooth(link.bluetooth.label) }
         if link.isUnlocked { return .connected }
@@ -114,12 +165,16 @@ final class Session: ObservableObject {
             return .searching
         }
         if link.phase == .connecting { return .connecting }
-        if link.phase == .scanning { return .searching }
+        if link.phase == .scanning { return quietScan ? .asleep : .searching }
         if connected { return .locked }
         return .asleep
     }
 
     #if DEBUG
+    /// `-demoTransition`: "searching" for 3 s, then connected (to check the dashboard's entrance).
+    private static let demoTransition = ProcessInfo.processInfo.arguments.contains("-demoTransition")
+    private static let demoStart = Date()
+
     /// Simulator screenshots: `-demoConnect <state>` forces the status Home shows.
     private static var demoStatus: Status? {
         let args = ProcessInfo.processInfo.arguments

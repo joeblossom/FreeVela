@@ -44,7 +44,7 @@ struct SettingsView: View {
                     Section {
                         NavigationLink { LabView() } label: { SettingsRow("Developer tools", "wrench.and.screwdriver.fill", plain: true) }
                     } footer: {
-                        footer("Raw Bluetooth, unlock steps and the full log.")
+                        footer("The bike's state, the ride recorder, motor tuning and the full log.")
                     }
                     .paintRows()
                 }

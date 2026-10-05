@@ -253,10 +253,13 @@ struct PaintSegmented<T: Hashable>: View {
 }
 
 /// The dark "Start ride" style bar button: condensed caps, left-aligned, with an optional trailing symbol.
+/// `.onPaint` inverts it for the painted background (the paint's `on` color with paint-colored text).
 struct InkBarButton: View {
+    enum Style { case ink, onPaint }
     @Environment(\.theme) private var theme
     var title: String
     var symbol: String?
+    var style: Style = .ink
     var action: () -> Void
 
     var body: some View {
@@ -268,8 +271,8 @@ struct InkBarButton: View {
             }
             .padding(.horizontal, 22)
             .frame(maxWidth: .infinity, minHeight: 60)
-            .foregroundStyle(theme.onInk)
-            .background(theme.ink, in: RoundedRectangle(cornerRadius: 16))
+            .foregroundStyle(style == .ink ? theme.onInk : theme.paint.frame)
+            .background(style == .ink ? theme.ink : theme.paint.on, in: RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
     }

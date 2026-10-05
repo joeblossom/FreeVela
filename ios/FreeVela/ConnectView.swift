@@ -101,18 +101,13 @@ struct ConnectView: View {
                 Spacer(minLength: 16)
             }
             .padding(.horizontal, 28)
-            .padding(.bottom, 40 + 36)
             .foregroundStyle(theme.paint.on)
-            .background(theme.paint.frame)
 
-            panel
-                .frame(maxWidth: .infinity, minHeight: 60)
-                .padding(.top, 32)
+            action
                 .padding(.horizontal, 20)
                 .padding(.bottom, 16)
-                .background(TyreBackground().ignoresSafeArea(edges: .bottom))
-                .padding(.top, -36)
         }
+        .background(theme.paint.frame.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.25), value: phase)
         .sensoryFeedback(.success, trigger: phase == .success)
         .onChange(of: phase.headline) { AccessibilityNotification.Announcement(phase.headline).post() }
@@ -136,16 +131,17 @@ struct ConnectView: View {
         .padding(.horizontal, -8)   // the header uses 20 pt margins, the rest 28
     }
 
-    @ViewBuilder private var panel: some View {
+    /// The one action that helps, on the paint; none while the app is working on it.
+    @ViewBuilder private var action: some View {
         switch phase {
         case .bluetooth:
-            InkBarButton(title: "Open Settings", symbol: "arrow.right") {
+            InkBarButton(title: "Open Settings", symbol: "arrow.right", style: .onPaint) {
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
             }
         case .locked:
-            InkBarButton(title: "Unlock", symbol: "arrow.right") { Task { await session.unlock() } }
+            InkBarButton(title: "Unlock", symbol: "arrow.right", style: .onPaint) { Task { await session.unlock() } }
         case .asleep:
-            InkBarButton(title: "Connect", symbol: "arrow.right") { Task { await session.connect() } }
+            InkBarButton(title: "Connect", symbol: "arrow.right", style: .onPaint) { Task { await session.connect() } }
         case .searching, .connecting, .unlocking, .success:
             Color.clear.frame(height: 60)
         }

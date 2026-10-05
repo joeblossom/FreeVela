@@ -38,6 +38,9 @@ struct FirmwareImage: Identifiable, Hashable {
         FirmwareImage(name: "FreeVela 0.2.0 (pre-release)", version: "0.2.0", freeVela: true,
                       size: 779_328, sha256: "c85b2d284f5a8aa080df3309032976eeb99a4fdab076f1afa008b42f4c2bcc55",
                       url: release("firmware-v0.2.0", "freevela-0.2.0.bin")),
+        // 0.2.0 plus waking from sleep on the button or the brake alone, and the live inputs (`fv.io`). Test build.
+        FirmwareImage(name: "FreeVela 0.2.1-beta1 (test)", version: "0.2.1-beta1", freeVela: true,
+                      size: 779_824, sha256: "4ce311f17ebb1ad2b025fc59e118243d444a6d75af84bcd4ee0d90ac11d1e877"),
     ]
 
     private static func release(_ tag: String, _ file: String) -> URL? {

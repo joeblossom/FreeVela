@@ -79,27 +79,4 @@ enum BikeProtocol {
     /// Odometer: the app shows motor.pulse × 0.00039 km (× 0.00023 mi).
     static let kmPerPulse = 0.00039
     static let miPerPulse = 0.00023
-
-    struct Preset: Identifiable {
-        let label: String
-        let json: String
-        var id: String { json }
-    }
-
-    static let presets: [Preset] = [
-        Preset(label: "Alarm arm", json: #"{"type":"alarm/ARM"}"#),
-        Preset(label: "Alarm off", json: #"{"type":"alarm/DESARM"}"#),
-        Preset(label: "ASSIST_SET 1", json: #"{"type":"motor/ASSIST_SET","payload":1}"#),
-        Preset(label: "ASSIST_SET 0", json: #"{"type":"motor/ASSIST_SET","payload":0}"#),
-        Preset(label: "Saver 0", json: #"{"type":"pwr/SAVER_UPDATED","payload":0}"#),
-        Preset(label: "Saver 20", json: #"{"type":"pwr/SAVER_UPDATED","payload":20}"#),
-        Preset(label: "Saver 100", json: #"{"type":"pwr/SAVER_UPDATED","payload":100}"#),
-        Preset(label: "Sleep", json: #"{"type":"pwr/SLEEP_REQUESTED"}"#),
-        Preset(label: "E-brake on", json: #"{"type":"motor/EBC_SET","payload":1}"#),
-        Preset(label: "E-brake off", json: #"{"type":"motor/EBC_SET","payload":0}"#),
-        // Supported by Vela firmware 2306052112 (see Capability.light).
-        Preset(label: "Light auto", json: #"{"type":"light/MODE_SET","payload":0}"#),
-        Preset(label: "Light on", json: #"{"type":"light/MODE_SET","payload":1}"#),
-        Preset(label: "Light off", json: #"{"type":"light/MODE_SET","payload":-1}"#),
-    ]
 }

@@ -12,7 +12,6 @@ struct HomeView: View {
     @State private var confirmSiren = false
     /// Heights of the parts above and below the flexible gap, so the speed sits on the panel.
     @State private var topHeight: CGFloat = 0
-    @State private var bottomHeight: CGFloat = 0
     @State private var speedHeight: CGFloat = 0
     @State private var panelHeight: CGFloat = 0
     /// The short "Connected" moment between the connecting screen and the dashboard.
@@ -55,7 +54,7 @@ struct HomeView: View {
             }
         }
         .background {
-            VStack(spacing: 0) { theme.paint.frame; theme.cream }.ignoresSafeArea()
+            VStack(spacing: 0) { theme.paint.frame; showsConnect ? theme.paint.frame : theme.cream }.ignoresSafeArea()
         }
         .paintStatusBar()
         #if DEBUG
@@ -76,7 +75,9 @@ struct HomeView: View {
     /// The connected Home: speed, assist, quick actions, Start ride.
     private var dashboard: some View {
         GeometryReader { geo in
-            let gap = max(16, geo.size.height - topHeight - bottomHeight)
+            // From the current measurements (an onChange copy went stale when the dashboard
+            // appeared after the connecting screen, leaving a screen-high gap).
+            let gap = max(16, geo.size.height - topHeight - (speedHeight + panelHeight - 36))
             ScrollView {
                 VStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 0) {
@@ -98,7 +99,6 @@ struct HomeView: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .onChange(of: speedHeight + panelHeight) { bottomHeight = speedHeight + panelHeight - 36 }
         }
     }
 

@@ -66,7 +66,7 @@ What it does today, all confirmed on a real bike:
 - Find my bike (sounds the siren for 15 s)
 - Battery, speed, odometer, firmware version
 - Connects automatically when you open the app
-- Developer tools: raw Bluetooth access, a shareable log, a ride recorder
+- Developer tools: the bike's state, a ride recorder, motor tuning and a shareable log
 
 New in the latest builds (FreeVela 0.2.0 features are tested in the emulator, not yet on many bikes):
 

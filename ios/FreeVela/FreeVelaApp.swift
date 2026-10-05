@@ -77,7 +77,10 @@ private struct RootView: View {
         }
         .onChange(of: session.selectedID) { session.autoConnect() }
         .onChange(of: link.bluetooth) { session.autoConnect() }
-        .onChange(of: scenePhase) { if scenePhase == .active { session.autoConnect() } }
+        .onChange(of: scenePhase, initial: true) {
+            session.foreground = scenePhase == .active
+            if scenePhase == .active { session.autoConnect() }
+        }
     }
 
     /// SwiftUI's preferredColorScheme(nil) doesn't undo an earlier light/dark choice, so set the

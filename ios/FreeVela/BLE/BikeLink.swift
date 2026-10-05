@@ -81,13 +81,13 @@ final class BikeLink: NSObject, ObservableObject {
 
     // MARK: Scan / connect
 
-    func startScan() {
+    func startScan(quiet: Bool = false) {
         guard bluetooth == .poweredOn else { log.add(.error, "Bluetooth is \(bluetooth.label)"); return }
         found = []
         phase = .scanning
         // No service filter: the bike may not advertise its service UUIDs.
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
-        log.add(.info, "scanning")
+        if !quiet { log.add(.info, "scanning") }
     }
 
     func stopScan() {
@@ -139,8 +139,9 @@ final class BikeLink: NSObject, ObservableObject {
 
     /// Scans for up to `timeout` seconds and returns the most likely bike:
     /// name containing the device id, then "Vela"-named, then advertising Vela services.
-    func findBike(timeout: TimeInterval = 10) async -> CBPeripheral? {
-        startScan()
+    /// `quiet` (background looking) only logs when it finds the bike.
+    func findBike(timeout: TimeInterval = 10, quiet: Bool = false) async -> CBPeripheral? {
+        startScan(quiet: quiet)
         defer { stopScan() }
         let start = Date()
         var firstSeen: Date?
@@ -154,7 +155,11 @@ final class BikeLink: NSObject, ObservableObject {
             }
         }
         let best = bestBike()
-        log.add(best == nil ? .error : .info, best == nil ? "no bike found nearby" : "found \(best!.name ?? "bike") rssi \(best!.rssi)")
+        if let best {
+            log.add(.info, "found \(best.name ?? "bike") rssi \(best.rssi)")
+        } else if !quiet {
+            log.add(.error, "no bike found nearby")
+        }
         return best?.peripheral
     }
 
@@ -291,17 +296,7 @@ final class BikeLink: NSObject, ObservableObject {
         }
     }
 
-    // MARK: Protocol steps
-
-    func writeReleasedKey() async {
-        guard let bytes = bike?.releasedKeyBytes else { log.add(.error, "no releasedKey loaded"); return }
-        await attempt("write RELEASE") { try await write(BikeProtocol.release, bytes) }
-    }
-
-    func writeKey() async {
-        guard let bytes = bike?.keyBytes else { log.add(.error, "no key loaded"); return }
-        await attempt("write KEY") { try await write(BikeProtocol.key, bytes) }
-    }
+    // MARK: Keys
 
     /// Replaces the bike's key: RELEASE ← current key (the bike forgets it), then KEY ← the new key
     /// (the bike registers it and stays unlocked). Returns the new keys once the bike has them; the
@@ -366,26 +361,6 @@ final class BikeLink: NSObject, ObservableObject {
         setNotify(true)
         startPolling()
         return .paired
-    }
-
-    /// The expected happy path from docs/protocol.md, stopping at the first surprise.
-    func runAuth(writeRelease: Bool) async {
-        guard bike != nil else { log.add(.error, "load a bike's keys first"); return }
-        log.add(.info, "— auth sequence (write RELEASE: \(writeRelease ? "yes" : "no")) —")
-        do {
-            let challenge = try await read(BikeProtocol.challenge)
-            if !challenge.isEmpty {
-                log.add(.error, "CHALLENGE is not empty — the bike wants challenge-response. Stopping; share this log.")
-                return
-            }
-        } catch {
-            log.add(.error, "read CHALLENGE: \(errorText(error)) — continuing")
-        }
-        await attempt("read RELEASE") { try await read(BikeProtocol.release) }
-        if writeRelease { await writeReleasedKey() }
-        await writeKey()
-        await attempt("read STATE") { try await read(BikeProtocol.state) }
-        log.add(.info, "— auth sequence done. Try a harmless dispatch (Alarm arm/off) to confirm. —")
     }
 
     /// Sends one action, in order with any other commands.
