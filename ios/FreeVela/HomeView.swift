@@ -15,10 +15,66 @@ struct HomeView: View {
     @State private var bottomHeight: CGFloat = 0
     @State private var speedHeight: CGFloat = 0
     @State private var panelHeight: CGFloat = 0
+    /// The short "Connected" moment between the connecting screen and the dashboard.
+    @State private var showingSuccess = false
 
     private var ok: Bool { link.isUnlocked }
+    private var connected: Bool { session.status == .connected }
+    private var showsConnect: Bool { !connected || showingSuccess || Self.demoSuccess }
+
+    #if DEBUG
+    private static let demoSuccess: Bool = {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-demoConnect"), i + 1 < args.count else { return false }
+        return args[i + 1] == "success"
+    }()
+    #else
+    private static let demoSuccess = false
+    #endif
 
     var body: some View {
+        Group {
+            if showsConnect {
+                ConnectView(phase: showingSuccess || Self.demoSuccess ? .success : ConnectView.Phase(session.status)) {
+                    showSettings = true
+                }
+                .transition(.opacity)
+            } else {
+                dashboard
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 14)), removal: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.5), value: showsConnect)
+        .onChange(of: connected) { was, now in
+            // Not when the app opens already connected: only after connecting here.
+            guard now, !was else { return }
+            showingSuccess = true
+            Task {
+                try? await Task.sleep(for: .seconds(0.9))
+                showingSuccess = false
+            }
+        }
+        .background {
+            VStack(spacing: 0) { theme.paint.frame; theme.cream }.ignoresSafeArea()
+        }
+        .paintStatusBar()
+        #if DEBUG
+        .onAppear {
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains("-demoSettings") { showSettings = true }
+            if args.contains("-demoRide") { riding = true }
+        }
+        #endif
+        .sheet(isPresented: $showSettings) { SettingsView().themed() }
+        .fullScreenCover(isPresented: $riding) { RideView().themed() }
+        .confirmationDialog("Sound the bike's siren for 15 seconds? It's loud. Stay connected until it stops.",
+                            isPresented: $confirmSiren, titleVisibility: .visible) {
+            Button("Sound alarm", role: .destructive) { session.soundSiren() }
+        }
+    }
+
+    /// The connected Home: speed, assist, quick actions, Start ride.
+    private var dashboard: some View {
         GeometryReader { geo in
             let gap = max(16, geo.size.height - topHeight - bottomHeight)
             ScrollView {
@@ -43,23 +99,6 @@ struct HomeView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .onChange(of: speedHeight + panelHeight) { bottomHeight = speedHeight + panelHeight - 36 }
-        }
-        .background {
-            VStack(spacing: 0) { theme.paint.frame; theme.cream }.ignoresSafeArea()
-        }
-        .paintStatusBar()
-        #if DEBUG
-        .onAppear {
-            let args = ProcessInfo.processInfo.arguments
-            if args.contains("-demoSettings") { showSettings = true }
-            if args.contains("-demoRide") { riding = true }
-        }
-        #endif
-        .sheet(isPresented: $showSettings) { SettingsView().themed() }
-        .fullScreenCover(isPresented: $riding) { RideView().themed() }
-        .confirmationDialog("Sound the bike's siren for 15 seconds? It's loud. Stay connected until it stops.",
-                            isPresented: $confirmSiren, titleVisibility: .visible) {
-            Button("Sound alarm", role: .destructive) { session.soundSiren() }
         }
     }
 
@@ -244,27 +283,12 @@ struct StatusBanner: View {
         var button: (String, () -> Void)?
     }
 
+    /// Only on the connected Home now; the not-connected states are ConnectView.
     private var content: Content? {
-        switch session.status {
-        case .connected:
-            guard let bike = session.bike, keys.needsBackup.contains(bike.id) else { return nil }
-            return Content(symbol: "key.fill", title: "No key backup yet.",
-                           text: "Without one, a lost phone means a locked bike.",
-                           button: ("Save", { BackupShare.present(keys) }))
-        case .bluetooth(let state):
-            return Content(symbol: "antenna.radiowaves.left.and.right.slash", title: "Bluetooth is \(state).",
-                           text: "FreeVela needs Bluetooth to talk to your bike.")
-        case .searching(let what):
-            return Content(title: what, text: "Stand next to it. Close the old Vela app — the bike talks to one phone at a time.",
-                           spinning: true)
-        case .locked:
-            return Content(symbol: "lock.fill", title: "Connected, but locked.", text: "Unlocking takes a couple of seconds.",
-                           button: ("Unlock", { Task { await session.unlock() } }))
-        case .asleep:
-            return Content(symbol: "moon.fill", title: "Bike is asleep.",
-                           text: "Hold the brake lever and the handlebar button together to wake it.",
-                           button: ("Connect", { Task { await session.connect() } }))
-        }
+        guard session.status == .connected, let bike = session.bike, keys.needsBackup.contains(bike.id) else { return nil }
+        return Content(symbol: "key.fill", title: "No key backup yet.",
+                       text: "Without one, a lost phone means a locked bike.",
+                       button: ("Save", { BackupShare.present(keys) }))
     }
 }
 

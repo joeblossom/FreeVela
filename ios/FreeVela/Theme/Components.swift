@@ -46,6 +46,8 @@ extension Session.Status {
         case .connected: "Connected"
         case .locked: "Locked"
         case .searching: "Searching…"
+        case .connecting: "Connecting…"
+        case .unlocking: "Unlocking…"
         case .bluetooth: "Bluetooth off"
         case .asleep: "Asleep"
         }

@@ -91,17 +91,42 @@ final class Session: ObservableObject {
     // MARK: Status shown on Home
 
     enum Status: Equatable {
-        case bluetooth(String), searching(String), locked, connected, asleep
+        case bluetooth(String), searching, connecting, unlocking, locked, connected, asleep
     }
 
     var status: Status {
+        #if DEBUG
+        if let demo = Self.demoStatus { return demo }
+        #endif
         if link.bluetooth != .poweredOn { return .bluetooth(link.bluetooth.label) }
         if link.isUnlocked { return .connected }
-        if let busy { return .searching(busy) }
-        if link.phase == .connecting || link.phase == .scanning { return .searching("Looking for your bike…") }
+        if let busy {
+            if busy.hasPrefix("Connecting") { return .connecting }
+            if busy.hasPrefix("Unlock") || busy.hasPrefix("Retrying") { return .unlocking }
+            return .searching
+        }
+        if link.phase == .connecting { return .connecting }
+        if link.phase == .scanning { return .searching }
         if connected { return .locked }
         return .asleep
     }
+
+    #if DEBUG
+    /// Simulator screenshots: `-demoConnect <state>` forces the status Home shows.
+    private static var demoStatus: Status? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-demoConnect"), i + 1 < args.count else { return nil }
+        switch args[i + 1] {
+        case "bluetooth": return .bluetooth("off")
+        case "searching": return .searching
+        case "connecting": return .connecting
+        case "unlocking": return .unlocking
+        case "locked": return .locked
+        case "asleep": return .asleep
+        default: return nil
+        }
+    }
+    #endif
 }
 
 /// App-wide display preferences.
