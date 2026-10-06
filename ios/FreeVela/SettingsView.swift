@@ -26,8 +26,12 @@ struct SettingsView: View {
                 Form {
                     if let bike = session.bike { Section { BikeCard(bike: bike) }.listRowBackground(Color.clear) }
                     paintSection
-                    BikesSection(onSetUp: { settingUp = true }, onImport: { importing = true },
-                                 onPaste: { pasting = true }, error: keyError)
+                    if session.demo {
+                        demoSection
+                    } else {
+                        BikesSection(onSetUp: { settingUp = true }, onImport: { importing = true },
+                                     onPaste: { pasting = true }, error: keyError)
+                    }
                         if link.isUnlocked, link.can(.ebrake) || link.can(.ecoThreshold) { riding }
                     if link.isUnlocked, link.can(.motorTune) { motor }
                     if link.isUnlocked, link.can(.sleepTimer) { power }
@@ -41,12 +45,14 @@ struct SettingsView: View {
                         footer("The log never contains your keys.")
                     }
                     .paintRows()
+                    if !session.demo {
                     Section {
                         NavigationLink { LabView() } label: { SettingsRow("Developer tools", "wrench.and.screwdriver.fill", plain: true) }
                     } footer: {
                         footer("The bike's state, the ride recorder, motor tuning and the full log.")
                     }
                     .paintRows()
+                    }
                 }
                 .paintList()
                 .listSectionSpacing(18)
@@ -272,6 +278,20 @@ struct SettingsView: View {
         return fw.kind == .freeVela && fw.version == latest.version ? "Up to date" : "\(latest.label) available"
     }
 
+    private var demoSection: some View {
+        Section {
+            Button {
+                dismiss()
+                session.stopDemo()
+            } label: { SettingsRow("Leave demo", "rectangle.portrait.and.arrow.right") }
+        } header: {
+            SectionHeader("Demo")
+        } footer: {
+            footer("You're trying FreeVela with a simulated bike. Nothing is sent over Bluetooth and nothing is saved. Leave the demo to set up or add your own bike.")
+        }
+        .paintRows()
+    }
+
     private var firmware: some View {
         Section {
             LabeledContent {
@@ -279,6 +299,7 @@ struct SettingsView: View {
             } label: {
                 SettingsRow("Installed", "cpu", plain: true)
             }
+            if !session.demo {
             NavigationLink { FirmwareUpdateView() } label: {
                 HStack(spacing: 12) {
                     SettingsIcon("arrow.down.circle.fill")
@@ -287,6 +308,7 @@ struct SettingsView: View {
                         Text(updateNote).font(.archivo(13, weight: 400)).foregroundStyle(theme.inkMuted)
                     }
                 }
+            }
             }
         } header: {
             SectionHeader("Firmware")

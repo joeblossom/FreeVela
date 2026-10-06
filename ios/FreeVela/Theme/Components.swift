@@ -62,7 +62,7 @@ struct StatusChip: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle().fill(theme.paint.frame).frame(width: 6, height: 6)
-            Text(session.status.chipLabel)
+            Text(session.demo ? "Demo · simulated bike" : session.status.chipLabel)
                 .font(.archivo(11, weight: 700))
                 .tracking(11 * 0.12)
                 .textCase(.uppercase)

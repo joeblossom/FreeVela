@@ -88,21 +88,43 @@ final class Session: ObservableObject {
 
     /// Nothing else is driving the connection, and an unlock hasn't just failed.
     private var mayActOnItsOwn: Bool {
-        bike != nil && busy == nil && !setupRunning && !updater.running && link.bluetooth == .poweredOn
+        bike != nil && !link.demo && busy == nil && !setupRunning && !updater.running && link.bluetooth == .poweredOn
             && (unlockFailedAt.map { Date().timeIntervalSince($0) > 60 } ?? true)
     }
 
-    var bike: BikeKeys? { keys.bikes.first { $0.id == selectedID } }
+    var bike: BikeKeys? { link.demo ? Self.demoBike : keys.bikes.first { $0.id == selectedID } }
+
+    // MARK: Demo ("Try without a bike")
+
+    /// Not saved anywhere: the demo bike never reaches the keychain or iCloud.
+    private static let demoBike = BikeKeys(id: "demo", key: "", releasedKey: "", displayName: "Demo bike")
+    var demo: Bool { link.demo }
+
+    func startDemo() {
+        pending = [:]
+        link.startDemo()
+        link.bike = bike
+        objectWillChange.send()
+    }
+
+    func stopDemo() {
+        pending = [:]
+        link.stopDemo()
+        link.bike = bike
+        objectWillChange.send()
+        autoConnect()
+    }
     var connected: Bool { link.phase == .connected && link.ready }
 
     /// Call when the bike list changes, so the selection never points at a removed bike.
     func bikesChanged() {
+        if link.demo, !keys.bikes.isEmpty { stopDemo() }
         if bike == nil { selectedID = keys.bikes.first?.id } else { link.bike = bike }
     }
 
     /// Looks for the bike once whenever the app opens or comes back, if it isn't connected.
     func autoConnect() {
-        guard bike != nil, busy == nil, !setupRunning, !updater.running, link.bluetooth == .poweredOn,
+        guard bike != nil, !link.demo, busy == nil, !setupRunning, !updater.running, link.bluetooth == .poweredOn,
               link.phase != .connecting, link.phase != .scanning, !connected else { return }
         busy = "Looking for your bike…"
         Task { await connect() }
@@ -164,6 +186,7 @@ final class Session: ObservableObject {
         if let demo = Self.demoStatus { return demo }
         if Self.demoTransition { return Date() < Self.demoStart + 3 ? .searching : .connected }
         #endif
+        if link.demo { return .connected }
         if link.bluetooth != .poweredOn { return .bluetooth(link.bluetooth.label) }
         if link.isUnlocked { return .connected }
         if let busy {

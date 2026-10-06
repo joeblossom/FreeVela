@@ -64,6 +64,9 @@ final class BikeLink: NSObject, ObservableObject {
     private var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     /// Bumped on each assist request; queued requests that are no longer the latest are skipped.
     private var assistGeneration = 0
+    /// "Try without a bike": a simulated bike that answers commands here; nothing goes over Bluetooth.
+    @Published private(set) var demo = false
+    private var demoState: [String: Any] = [:]
 
     init(log: LabLog) {
         self.log = log
@@ -380,6 +383,7 @@ final class BikeLink: NSObject, ObservableObject {
 
     /// The write + read-back; callers hold the "command" lock.
     private func sendAction(_ json: String, base64Text: Bool) async {
+        if demo { applyDemo(json); return }
         let trimmed = json.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let raw = trimmed.data(using: .utf8),
               (try? JSONSerialization.jsonObject(with: raw)) != nil else {
@@ -460,6 +464,79 @@ final class BikeLink: NSObject, ObservableObject {
     }
 
     // MARK: State handling
+
+    // MARK: Demo
+
+    func startDemo() {
+        disconnect()
+        stopScan()
+        demo = true
+        demoState = [
+            "sys": ["idle": 0, "ver": "2306052112"],
+            "alarm": ["armed": false, "trig": false],
+            "pas": ["pedal": true],
+            "light": ["mode": 0],
+            "pwr": ["fuel": 78, "save": 20, "chr": 0],
+            "button": false,
+            "motor": ["boost": false, "rps": "3.9", "pulse": 3302820, "brk": false, "ast": 1, "ebc": 1],
+            "fv": ["ver": "0.2.1", "caps": ["key-reset", "sleep-timer", "motor-tune"], "trial": 0, "sleep": 30,
+                   "tune": ["top": 4.276, "btn": 0, "mg": 18, "sl": 29, "cr": 0.4],
+                   "live": ["out": 225, "crv": "drive"]],
+        ]
+        phase = .connected
+        ready = true
+        log.add(.info, "demo bike started (nothing is sent over Bluetooth)")
+        feedDemo()
+    }
+
+    func stopDemo() {
+        guard demo else { return }
+        demo = false
+        demoState = [:]
+        phase = .idle
+        ready = false
+        values = [:]
+        lastState = [:]
+        firmware = nil
+        stateText = ""
+        log.add(.info, "demo bike stopped")
+    }
+
+    /// The demo bike's answer to an action: what the real firmware would put in STATE.
+    private func applyDemo(_ json: String) {
+        guard let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any],
+              let type = obj["type"] as? String else { return }
+        let payload = obj["payload"]
+        func set(_ section: String, _ key: String, _ value: Any) {
+            var s = demoState[section] as? [String: Any] ?? [:]
+            s[key] = value
+            demoState[section] = s
+        }
+        log.add(.info, "demo: \(type)")
+        switch type {
+        case "motor/ASSIST_SET": set("motor", "ast", payload as? Int ?? 0)
+        case "pwr/SAVER_UPDATED": set("pwr", "save", payload as? Int ?? 0)
+        case "motor/EBC_SET": set("motor", "ebc", payload as? Int ?? 0)
+        case "light/MODE_SET": set("light", "mode", payload as? Int ?? 0)
+        case "alarm/ARM": set("alarm", "armed", true)
+        case "alarm/DESARM": set("alarm", "armed", false); set("alarm", "trig", false)
+        case "alarm/TRIGGER": set("alarm", "trig", true)
+        case "fv/SLEEP_SET": set("fv", "sleep", payload as? Int ?? 0)
+        case "fv/TUNE_SET":
+            var fv = demoState["fv"] as? [String: Any] ?? [:]
+            var tune = fv["tune"] as? [String: Any] ?? [:]
+            for (k, v) in payload as? [String: Any] ?? [:] { tune[k] = v }
+            fv["tune"] = tune
+            demoState["fv"] = fv
+        default: break
+        }
+        feedDemo()
+    }
+
+    private func feedDemo() {
+        guard let data = try? JSONSerialization.data(withJSONObject: demoState) else { return }
+        feedState(data)
+    }
 
     #if DEBUG
     /// Simulator screenshots (launch with `-demo`): a sample unlocked bike on FreeVela firmware.

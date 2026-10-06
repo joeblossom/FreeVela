@@ -47,7 +47,7 @@ private struct RootView: View {
 
     var body: some View {
         Group {
-            if onboarded {
+            if (onboarded && !keys.bikes.isEmpty) || session.demo {
                 HomeView()
             } else {
                 OnboardingView { onboarded = true }
@@ -58,6 +58,7 @@ private struct RootView: View {
         .onChange(of: appearance) { apply(appearance) }
         .onAppear {
             #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-tryDemo") { session.startDemo(); return }
             if ProcessInfo.processInfo.arguments.contains("-demo") {
                 if keys.bikes.isEmpty {
                     let zero = Data(count: 32).base64EncodedString()

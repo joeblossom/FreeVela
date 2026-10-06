@@ -4,6 +4,7 @@ import SwiftUI
 /// Vela account on a computer.
 struct SignedOutView: View {
     var onSetUp: () -> Void
+    @EnvironmentObject private var session: Session
     @Environment(\.theme) private var theme
     @State private var askKeys = false
     @State private var importing = false
@@ -32,6 +33,15 @@ struct SignedOutView: View {
                              "Needs a computer and some tech know-how. Keeps the bike's original firmware.") { showGuide = true }
                 }
                 .background(theme.surface, in: RoundedRectangle(cornerRadius: 16))
+                Button { session.startDemo() } label: {
+                    HStack(spacing: 6) {
+                        Text("No bike with you?").font(.archivo(15, weight: 400))
+                        Text("Try without a bike").font(.archivo(15, weight: 700)).underline()
+                    }
+                    .foregroundStyle(theme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.plain)
                 if let error { Text(error).font(.archivo(14, weight: 500)).foregroundStyle(.red) }
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "lock.fill").font(.system(size: 15))
